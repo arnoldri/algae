@@ -10,3 +10,21 @@ rcpp_hello_world <- function() {
     .Call(`_algae_rcpp_hello_world`)
 }
 
+#' Test function - multiply by 2
+#'
+#' @description Just testing
+#'
+#' @export
+timesTwo <- function(x) {
+    .Call(`_algae_timesTwo`, x)
+}
+
+#' @title Create mean matrix mumat
+#'
+#' @description Create the mean matrix mumat
+#'
+#' @export
+rcpp_make_mumat <- function(parlist, cpar) {
+    .Call(`_algae_rcpp_make_mumat`, parlist, cpar)
+}
+
