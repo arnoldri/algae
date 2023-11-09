@@ -71,3 +71,4 @@ Observation model
               \times 
               \log N(\log Z_{it},\sigma_e^2)
 \end{eqnarray*}
+
