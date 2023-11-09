@@ -1,0 +1,73 @@
+---
+title: "Nov23-Models"
+output: html_document
+date: "2023-11-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Model 1 - Binary state, binary observation
+
+State of site $i$ at time $t$:
+\begin{eqnarray*}
+   Z_{it} &=& \begin{cases} 0 & \text{No bloom present}\\
+                          1 & \text{Bloom present}
+            \end{cases}
+\end{eqnarray*}
+Observation
+\begin{eqnarray*}
+   Y_{it} &=& \begin{cases} 0 & \text{No algae observed}\\
+                          1 & \text{Algae observed}
+            \end{cases}
+\end{eqnarray*}
+
+Evolution model
+\begin{eqnarray*}
+   Q_{it} &=& \varepsilon
+              + \beta Z_{i,t-1}
+              + \lambda \sum_{j\neq i} C_{ij} Z_{j,t-1}\\
+   Z_{it}|{\bf Z}_{t-1} &\sim& \text{Bernoulli}(Q_{it})
+\end{eqnarray*}
+Parameters $\{0\leq \varepsilon \leq 1, 0 \leq \beta < \leq, 0\leq\lambda\leq 1\}$.
+
+Connectivities $\{C_{ij}\}$ are known.  
+
+Observation model
+\begin{eqnarray*}
+   Y_{it}|Z_{it} &\sim& \text{Bernoulli}(\delta + p_iZ_{i,t})\\
+   \Pr(Y_{it}=1 | Z_{it}=0) &=& \delta \qquad \text{(false positive)}\\
+   \Pr(Y_{it}=0 | Z_{it}=0) &=& 1-\delta \qquad \text{(true negative)}\\
+   \Pr(Y_{it}=1 | Z_{it}=1) &=& \delta + p_i \qquad \text{(true positive)}\\
+   \Pr(Y_{it}=0 | Z_{it}=1) &=& 1 - \delta - p_i \qquad\text{(false negative)}
+\end{eqnarray*}
+Parameters $0\leq \delta\leq 1$ and $0\leq p_i\leq 1$.  Require $0\leq \delta+p_i\leq 1$.
+
+Could have $p_i=p$ for all $p$, or a random effects model 
+$\text{logit}(p)\sim N(\mu_p,\sigma_p^2)$.
+
+
+
+# Model 2 - Continuous state, continuous observation
+
+Evolution model: 
+concentration at site $i$ (which has volume $V_i$) at time $t$:
+\begin{eqnarray*}
+   Z_{it} &=& B_{it} 
+              + \alpha C_{ii}^\gamma Z_{i,t-1} X_{it}
+              + \beta Z_{i,t-1}
+              + \lambda V_i^{-1} \sum_{j\neq i} C_{ij} V_j Z_{j,t-1}\\
+   B_{it} &\sim& \begin{cases}
+              \delta_{0}(\cdot) & \text{with probability $1-\pi$}\\
+              \log N(\log B_0,\sigma_B^2) & \text{with probability $\pi$}
+              \end{cases}\\
+  X_{it} &\sim& \text{Bernoulli}(\tau)
+\end{eqnarray*}
+
+Observation model
+\begin{eqnarray*}
+   Y_{it} &=& \text{Bernoulli}(\text{expit}(a + b(Z_{it}-Z_0)))
+              \times 
+              \log N(\log Z_{it},\sigma_e^2)
+\end{eqnarray*}
