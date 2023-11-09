@@ -47,6 +47,8 @@ Parameters $0\leq \delta\leq 1$ and $0\leq p_i\leq 1$.  Require $0\leq \delta+p_
 Could have $p_i=p$ for all $p$, or a random effects model 
 $\text{logit}(p)\sim N(\mu_p,\sigma_p^2)$.
 
+?
+
 
 
 ### Model 2 - Continuous state, continuous observation
