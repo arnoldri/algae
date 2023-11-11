@@ -355,8 +355,8 @@ display: none;
 </div>
 
 
-<div id="model-1---binary-state-binary-observation" class="section level1">
-<h1>Model 1 - Binary state, binary observation</h1>
+<div id="model-1---binary-state-binary-observation" class="section level3">
+<h3>Model 1 - Binary state, binary observation</h3>
 <p>State of site <span class="math inline">\(i\)</span> at time <span class="math inline">\(t\)</span>: <span class="math display">\[\begin{eqnarray*}
    Z_{it} &amp;=&amp; \begin{cases} 0 &amp; \text{No bloom present}\\
                           1 &amp; \text{Bloom present}
@@ -367,34 +367,37 @@ display: none;
             \end{cases}
 \end{eqnarray*}\]</span></p>
 <p>Evolution model <span class="math display">\[\begin{eqnarray*}
-   Q_{it} &amp;=&amp; \varepsilon
+   Q_{it} &amp;=&amp; \varepsilon C_{ii}
               + \beta Z_{i,t-1}
               + \lambda \sum_{j\neq i} C_{ij} Z_{j,t-1}\\
-   Z_{it}|{\bf Z}_{t-1} &amp;\sim&amp; \text{Bernoulli}(Q_{it})
+   U_{it} &amp;\overset{\text{iid}}{\sim}&amp; \text{Bernoulli}(\mu)\\
+   X_{it} &amp;=&amp; \prod_{j=1}^n U_{jt}^{I(C_{ij}&gt;0)}\\
+   Z_{it}|{\bf Z}_{t-1} &amp;\sim&amp; \text{Bernoulli}(Q_{it}X_{it})
 \end{eqnarray*}\]</span> Parameters <span class="math inline">\(\{0\leq
 \varepsilon \leq 1, 0 \leq \beta &lt; \leq, 0\leq\lambda\leq
 1\}\)</span>.</p>
 <p>Connectivities <span class="math inline">\(\{C_{ij}\}\)</span> are
 known.</p>
 <p>Observation model <span class="math display">\[\begin{eqnarray*}
-   Y_{it}|Z_{it} &amp;\sim&amp; \text{Bernoulli}(\delta + p_iZ_{i,t})\\
-   \Pr(Y_{it}=1 | Z_{it}=0) &amp;=&amp; \delta \qquad \text{(false
-positive)}\\
-   \Pr(Y_{it}=0 | Z_{it}=0) &amp;=&amp; 1-\delta \qquad \text{(true
-negative)}\\
-   \Pr(Y_{it}=1 | Z_{it}=1) &amp;=&amp; \delta + p_i \qquad \text{(true
-positive)}\\
-   \Pr(Y_{it}=0 | Z_{it}=1) &amp;=&amp; 1 - \delta - p_i
+   Y_{it}|Z_{it} &amp;\sim&amp; \text{Bernoulli}(\delta(1-C_{ii}) +
+pC_{ii}Z_{i,t})\\
+   \Pr(Y_{it}=1 | Z_{it}=0) &amp;=&amp; \delta(1-C_{ii}) \qquad
+\text{(false positive)}\\
+   \Pr(Y_{it}=0 | Z_{it}=0) &amp;=&amp; 1-\delta(1-C_{ii}) \qquad
+\text{(true negative)}\\
+   \Pr(Y_{it}=1 | Z_{it}=1) &amp;=&amp; \delta(1-C_{ii}) + pC_{ii}
+\qquad \text{(true positive)}\\
+   \Pr(Y_{it}=0 | Z_{it}=1) &amp;=&amp; 1 - \delta(1-C_{ii}) - pC_{ii}
 \qquad\text{(false negative)}
 \end{eqnarray*}\]</span> Parameters <span class="math inline">\(0\leq
-\delta\leq 1\)</span> and <span class="math inline">\(0\leq p_i\leq
-1\)</span>. Require <span class="math inline">\(0\leq \delta+p_i\leq
-1\)</span>.</p>
+\delta\leq 1\)</span> and <span class="math inline">\(0\leq p\leq
+1\)</span>. Require <span class="math inline">\(0\leq
+\delta(1-C_{ii})+pC_{ii}\leq 1\)</span>.</p>
 <p>Could have <span class="math inline">\(p_i=p\)</span> for all <span class="math inline">\(p\)</span>, or a random effects model <span class="math inline">\(\text{logit}(p)\sim
 N(\mu_p,\sigma_p^2)\)</span>.</p>
 </div>
-<div id="model-2---continuous-state-continuous-observation" class="section level1">
-<h1>Model 2 - Continuous state, continuous observation</h1>
+<div id="model-2---continuous-state-continuous-observation" class="section level3">
+<h3>Model 2 - Continuous state, continuous observation</h3>
 <p>Evolution model: concentration at site <span class="math inline">\(i\)</span> (which has volume <span class="math inline">\(V_i\)</span>) at time <span class="math inline">\(t\)</span>: <span class="math display">\[\begin{eqnarray*}
    Z_{it} &amp;=&amp; B_{it}
               + \alpha C_{ii}^\gamma Z_{i,t-1} X_{it}

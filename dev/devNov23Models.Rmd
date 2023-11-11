@@ -1,0 +1,50 @@
+---
+title: "devNov23models"
+output: html_document
+date: "2023-11-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+load("opar.Rda")
+library(maps)
+library(sf)
+library(dplyr)
+source("funcs.R")
+source("maps.R")
+```
+
+```{r}
+bbox.marlselect <- c(1645,5415,1720,5495)*1000
+xlim.marlselect <- bbox.marlselect[c(1,3)]
+ylim.marlselect <- bbox.marlselect[c(2,4)]
+bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
+                                                  bbox.marlselect[c(2,2,4,4,2)])))
+coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
+```
+
+
+```{r}
+list.files("data/")
+samplesites <- read.csv("data/sample_sites.csv")
+#View(samplesites)
+plot(samplesites$lon, samplesites$lat, xlab="Longitude", ylab="Latitude", asp=1/cos(41.0*pi/180))
+
+# sf version 0.2-7
+#rownames(samplesites) <- samplesites$name
+samplesites_sf = st_as_sf(samplesites, coords = c("lon", "lat"))
+## sf version 0.3-4, 0.4-0
+#DT_sf = st_as_sf(DT, coords = c("longitude", "latitude"), 
+#                 crs = 4326, agr = "constant")
+plot(samplesites_sf)
+```
+
+```{r}
+plot(coast$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
+points(samplesites$lon, samplesites$lat, col="red", pch=16)
+#print(par()$usr)
+```
+

@@ -25,10 +25,12 @@ Observation
 
 Evolution model
 \begin{eqnarray*}
-   Q_{it} &=& \varepsilon
+   Q_{it} &=& \varepsilon C_{ii}
               + \beta Z_{i,t-1}
               + \lambda \sum_{j\neq i} C_{ij} Z_{j,t-1}\\
-   Z_{it}|{\bf Z}_{t-1} &\sim& \text{Bernoulli}(Q_{it})
+   U_{it} &\overset{\text{iid}}{\sim}& \text{Bernoulli}(\mu)\\
+   X_{it} &=& \prod_{j=1}^n U_{jt}^{I(C_{ij}>0)}\\
+   Z_{it}|{\bf Z}_{t-1} &\sim& \text{Bernoulli}(Q_{it}X_{it})
 \end{eqnarray*}
 Parameters $\{0\leq \varepsilon \leq 1, 0 \leq \beta < \leq, 0\leq\lambda\leq 1\}$.
 
@@ -36,19 +38,16 @@ Connectivities $\{C_{ij}\}$ are known.
 
 Observation model
 \begin{eqnarray*}
-   Y_{it}|Z_{it} &\sim& \text{Bernoulli}(\delta + p_iZ_{i,t})\\
-   \Pr(Y_{it}=1 | Z_{it}=0) &=& \delta \qquad \text{(false positive)}\\
-   \Pr(Y_{it}=0 | Z_{it}=0) &=& 1-\delta \qquad \text{(true negative)}\\
-   \Pr(Y_{it}=1 | Z_{it}=1) &=& \delta + p_i \qquad \text{(true positive)}\\
-   \Pr(Y_{it}=0 | Z_{it}=1) &=& 1 - \delta - p_i \qquad\text{(false negative)}
+   Y_{it}|Z_{it} &\sim& \text{Bernoulli}(\delta(1-C_{ii}) + pC_{ii}Z_{i,t})\\
+   \Pr(Y_{it}=1 | Z_{it}=0) &=& \delta(1-C_{ii}) \qquad \text{(false positive)}\\
+   \Pr(Y_{it}=0 | Z_{it}=0) &=& 1-\delta(1-C_{ii}) \qquad \text{(true negative)}\\
+   \Pr(Y_{it}=1 | Z_{it}=1) &=& \delta(1-C_{ii}) + pC_{ii} \qquad \text{(true positive)}\\
+   \Pr(Y_{it}=0 | Z_{it}=1) &=& 1 - \delta(1-C_{ii}) - pC_{ii} \qquad\text{(false negative)}
 \end{eqnarray*}
-Parameters $0\leq \delta\leq 1$ and $0\leq p_i\leq 1$.  Require $0\leq \delta+p_i\leq 1$.
+Parameters $0\leq \delta\leq 1$ and $0\leq p\leq 1$.  Require $0\leq \delta(1-C_{ii})+pC_{ii}\leq 1$.
 
 Could have $p_i=p$ for all $p$, or a random effects model 
 $\text{logit}(p)\sim N(\mu_p,\sigma_p^2)$.
-
-?
-
 
 
 ### Model 2 - Continuous state, continuous observation
