@@ -20,9 +20,34 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// timesTwo
+NumericVector timesTwo(NumericVector x);
+RcppExport SEXP _algae_timesTwo(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(timesTwo(x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rcpp_make_mumat
+NumericMatrix rcpp_make_mumat(List parlist, List cpar);
+RcppExport SEXP _algae_rcpp_make_mumat(SEXP parlistSEXP, SEXP cparSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type parlist(parlistSEXP);
+    Rcpp::traits::input_parameter< List >::type cpar(cparSEXP);
+    rcpp_result_gen = Rcpp::wrap(rcpp_make_mumat(parlist, cpar));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_algae_rcpp_hello_world", (DL_FUNC) &_algae_rcpp_hello_world, 0},
+    {"_algae_timesTwo", (DL_FUNC) &_algae_timesTwo, 1},
+    {"_algae_rcpp_make_mumat", (DL_FUNC) &_algae_rcpp_make_mumat, 2},
     {NULL, NULL, 0}
 };
 
