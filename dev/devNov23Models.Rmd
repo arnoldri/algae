@@ -18,6 +18,9 @@ source("maps.R")
 ```
 
 ```{r}
+load("data/pmat.Rda")
+marlborough <- read.csv("data/marlborough.csv")
+marlborough_sf <- st_as_sf(marlborough, coords = c("x","y"))
 bbox.marlselect <- c(1645,5415,1720,5495)*1000
 xlim.marlselect <- bbox.marlselect[c(1,3)]
 ylim.marlselect <- bbox.marlselect[c(2,4)]
@@ -30,21 +33,112 @@ coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
 ```{r}
 list.files("data/")
 samplesites <- read.csv("data/sample_sites.csv")
+xlim.sites <- range(samplesites$x)
+ylim.sites <- range(samplesites$y)
 #View(samplesites)
-plot(samplesites$lon, samplesites$lat, xlab="Longitude", ylab="Latitude", asp=1/cos(41.0*pi/180))
 
 # sf version 0.2-7
 #rownames(samplesites) <- samplesites$name
-samplesites_sf = st_as_sf(samplesites, coords = c("lon", "lat"))
+samplesites_sf = st_as_sf(samplesites, coords = c("x","y"))
 ## sf version 0.3-4, 0.4-0
 #DT_sf = st_as_sf(DT, coords = c("longitude", "latitude"), 
 #                 crs = 4326, agr = "constant")
-plot(samplesites_sf)
+#plot(samplesites_sf)
 ```
 
 ```{r}
-plot(coast$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
-points(samplesites$lon, samplesites$lat, col="red", pch=16)
+plot(coast$geometry, col="dark green", xlim=xlim.sites, ylim=ylim.sites); box()
+plot(st_geometry(samplesites_sf), col="red", pch=16, add=TRUE)
+plot(st_geometry(marlborough_sf), col="blue", pch=16, add=TRUE)
+#points(samplesites$x, samplesites$y, col="red", pch=16)
+#abline(v=xlim.marlselect,col="blue")
+#abline(h=ylim.marlselect,col="blue")
 #print(par()$usr)
+```
+
+```{r}
+nm <- 10
+pmat1 <- pmat[1:nm,1:nm]
+pmat1 <- pmat1^0.2
+#diag(pmat1) <- diag(pmat1)/4
+pmat1[pmat1<0.10] <- 0
+# fix row sums  P[i,j] such that sum_i P[i,j]=1 for all j
+pmat1 <- apply(pmat1,2,function(x) x/sum(x))
+pmat1[pmat1<0.10] <- 0
+pmat1 <- apply(pmat1,2,function(x) x/sum(x))
+marl1 <- marlborough[1:nm,]
+xlim1 <- range(marl1$x); ylim1 <- range(marl1$y)
+xlim1 <- xlim1 + c(-1,1)*0.1*diff(xlim1)
+ylim1 <- ylim1 + c(-1,1)*0.1*diff(ylim1)
+```
+```{r}
+image(1:nm, 1:nm, 1+pmat1, axes=FALSE, asp=1, xlab="", ylab="",
+      col=heat.colors(n=30,rev=TRUE))
+axis(1, at=1:nm, cex.axis=1.5); axis(2, at=1:nm, cex.axis=1.5); box()
+```
+
+```{r}
+plot(coast$geometry, col="dark green", xlim=xlim1, ylim=ylim1); box()
+text(marl1$x, marl1$y, lab=1:nm)
+for(i in 1:nm) {
+  for(j in 1:nm) {
+    if(pmat1[i,j]>0.0) lines(marl1$x[c(i,j)], marl1$y[c(i,j)], col="red")
+  }
+}
+```
+
+```{r}
+fparlist <- list(nm=nm, pmat1=pmat1)
+
+eps <- 0.02 # Chance of spontaneous generation at a site
+lambda <- 0.70 # Transport survival parameter
+beta <- 1.00-lambda # Additional in-situ survival parameter
+mu <- 0.01 # Chance that an existing bloom will die
+delta <- 0.02 # Probability of a false positive (when scaled by 1-cvec)
+p <- 0.9 # Probability of a true positive ###(when scaled by cvec)
+parlist <- list(eps=eps, lambda=lambda, beta=beta, mu=mu, delta=delta, p=p)
+```
+
+```{r}
+nsim <- 500
+set.seed(-8)
+simlist <- binsimfunc(nsim, parlist, fparlist)
+
+#zmat
+#qmat
+par(opar)
+par(mfrow=c(1,3))
+par(oma=c(4.1,5.1,3.1,1.1))
+par(mar=c(1.1,1.1,1.1,1.1))
+image(1:nm, 1:nsim, t(simlist$zmat), xlab="Location", ylab="Time" ,main="State:Z", axes=FALSE)
+axis(1, at=1:nm); axis(2); box()
+image(1:nm, 1:nsim, t(1-simlist$xmat), xlab="Location", ylab="" ,main="Elimination:X", axes=FALSE)
+axis(1, at=1:nm); axis(2); box()
+image(1:nm, 1:nsim, t(simlist$ymat), xlab="Location", ylab="" ,main="Observation:Y", axes=FALSE)
+axis(1, at=1:nm); axis(2); box()
+par(opar)
+```
+
+Likelihood - Complete data
+```{r}
+llikef.complete <- function(parvec,zmat,ymat) {
+  nsim <- nrow(zmat)
+  nm <- ncol(zmat)
+  
+  qmat <- array(0, dim=c(nsim,nm))
+  umat <- array(0, dim=c(nsim,nm))
+  xmat <- array(1, dim=c(nsim,nm))
+
+  retval <- 0
+  qmat[1,] <- eps*cvec
+  for(t in 2:nsim) {
+    qmat[t,] <- pmin(1,eps*cvec + beta*zmat[t-1,] + lambda*pmat1%*%zmat[t-1,])
+    umat[t,] <- rbinom(nm, 1, mu)
+    xmat[t,] <- 1-(pmat1%*%umat[t,]>0)
+    zmat[t,] <- rbinom(nm, 1, xmat[t,]*qmat[t,])
+    ymat[t,] <- rbinom(nm, 1, pmin(1,delta*(1-cvec) + p*zmat[t,]))
+  }
+
+}
 ```
 

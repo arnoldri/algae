@@ -298,17 +298,23 @@ overflow-y: auto;
 border: 1px solid #ddd;
 border-radius: 4px;
 }
-.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
-content: "\e259";
+.tabset-dropdown > .nav-tabs > li.active:before {
+content: "";
 font-family: 'Glyphicons Halflings';
 display: inline-block;
 padding: 10px;
 border-right: 1px solid #ddd;
 }
 .tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
-content: "\e258";
-font-family: 'Glyphicons Halflings';
+content: "";
 border: none;
+}
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+content: "";
+font-family: 'Glyphicons Halflings';
+display: inline-block;
+padding: 10px;
+border-right: 1px solid #ddd;
 }
 .tabset-dropdown > .nav-tabs > li.active {
 display: block;
@@ -393,7 +399,7 @@ pC_{ii}Z_{i,t})\\
 \delta\leq 1\)</span> and <span class="math inline">\(0\leq p\leq
 1\)</span>. Require <span class="math inline">\(0\leq
 \delta(1-C_{ii})+pC_{ii}\leq 1\)</span>.</p>
-<p>Could have <span class="math inline">\(p_i=p\)</span> for all <span class="math inline">\(p\)</span>, or a random effects model <span class="math inline">\(\text{logit}(p)\sim
+<p>Could have <span class="math inline">\(p_i=p\)</span> for all <span class="math inline">\(i\)</span>, or a random effects model <span class="math inline">\(\text{logit}(p)\sim
 N(\mu_p,\sigma_p^2)\)</span>.</p>
 </div>
 <div id="model-2---continuous-state-continuous-observation" class="section level3">

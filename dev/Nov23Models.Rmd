@@ -46,8 +46,8 @@ Observation model
 \end{eqnarray*}
 Parameters $0\leq \delta\leq 1$ and $0\leq p\leq 1$.  Require $0\leq \delta(1-C_{ii})+pC_{ii}\leq 1$.
 
-Could have $p_i=p$ for all $p$, or a random effects model 
-$\text{logit}(p)\sim N(\mu_p,\sigma_p^2)$.
+Could have $p_i=p$ for all $i$, or a random effects model 
+$\text{logit}(p_i)\sim N(\mu_p,\sigma_p^2)$.
 
 
 ### Model 2 - Continuous state, continuous observation
