@@ -1,0 +1,108 @@
+---
+title: "HABS data"
+author: "Richard Arnold"
+date: '2023-11-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warn=FALSE, message=FALSE)
+```
+
+```{r}
+load("opar.Rda")
+library(maps)
+library(sf)
+library(dplyr)
+library(geojsonsf)
+library(ggplot2)
+library(readxl)
+library(tidyr)
+source("funcs.R")
+source("maps.R")
+```
+```{r}
+bbox.marlselect <- c(1645,5415,1720,5495)*1000
+xlim.marlselect <- bbox.marlselect[c(1,3)]
+ylim.marlselect <- bbox.marlselect[c(2,4)]
+bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
+                                                 bbox.marlselect[c(2,2,4,4,2)])))
+coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
+```
+
+```{r}
+#list.files("data/")
+```
+
+
+```{r}
+habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
+habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
+#plot(habspoly_sf)
+#ggplot(geo) + geom_sf(aes(fill = SA2_NAME)) + guides(fill = guide_none())
+```
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(habspoly_sf), col="yellow", add=TRUE)
+plot(st_geometry(st_centroid(habspoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
+#box(); axis(1); axis(2)
+```
+
+Presence Absence data
+```{r}
+#list.files("data/")
+habswide <- read_excel("data/HABs_synthetic_dataset_presence_absence.xlsx")
+habswide$ID <- as.numeric(habswide$ID)
+#habswide[1:3,]
+#range(habswide$ID,na.rm=TRUE) # 1 40
+#habswide[is.na(habswide$ID),]
+#habswide$Name
+
+habssites <- habswide[,c("ID","Name")]
+habssites <- habssites[order(habssites$ID),]
+
+habs <- pivot_longer(habswide, cols=names(habswide)[-(1:2)], names_to="date", values_to="present")
+habs$date <- gsub("'","",habs$date)
+habs$date <- as.Date(habs$date, format="%d-%b-%Y")
+#habs[1:5,]
+```
+
+```{r}
+par(opar)
+par(mar=c(5.1,10.1,4.1,2.1))
+nsites <- max(habssites$ID,na.rm=TRUE)
+idx <- habs$present==1
+plot(habs$date[idx], habs$ID[idx], pch=16, cex=0.4,
+     axes=FALSE, xlab="Date", ylab="", main="2018")
+axis.Date(1, range(habs$date[idx]), format="%d-%b"); 
+axis(2,las=2,at=1:nsites, habssites$Name[1:nsites], cex.axis=0.3); box()
+par(opar)
+```
+
+Connection and migration matrices
+```{r}
+list.files("data/")
+fname <- "data/Connectivity_matrices_04_to_07_2018.xlsx"
+conn <- lapply(1:13, function(i) read_excel(fname, sheet=i, col_names=FALSE))
+names(conn) <- excel_sheets(fname)
+fname <- "data/Migration_matrices_04_to_07_2018.xls"
+migr <- lapply(1:13, function(i) read_excel(fname, sheet=i, col_names=FALSE))
+names(migr) <- excel_sheets(fname)
+matdates <- as.Date(names(migr),format="%Y%m%d")
+```
+
+```{r}
+# rows are sources, columns are receiving locations
+sapply(conn, dim) # all 40 by 40
+sapply(migr, dim) # all 40 by 40
+# conn is the gives the proportion of particles form the source that end up in the receiving polygon
+# if this were a complete tiling of the area then the row sums would be 1
+sapply(conn, function(x) range(apply(x,1,sum))) # because this is not a complete tiling then many particles are lost
+# migr gives the proportion of particles arriving in the receiver that come from the source
+# the column sums are all 1 
+sapply(migr, function(x) range(apply(x,2,sum))) # this is correct
+```
+
+

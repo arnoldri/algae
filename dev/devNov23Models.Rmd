@@ -13,6 +13,8 @@ load("opar.Rda")
 library(maps)
 library(sf)
 library(dplyr)
+library(geojsonsf)
+library(ggplot2)
 source("funcs.R")
 source("maps.R")
 ```
@@ -25,7 +27,7 @@ bbox.marlselect <- c(1645,5415,1720,5495)*1000
 xlim.marlselect <- bbox.marlselect[c(1,3)]
 ylim.marlselect <- bbox.marlselect[c(2,4)]
 bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
-                                                  bbox.marlselect[c(2,2,4,4,2)])))
+                                                 bbox.marlselect[c(2,2,4,4,2)])))
 coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
 ```
 
@@ -141,4 +143,6 @@ llikef.complete <- function(parvec,zmat,ymat) {
 
 }
 ```
+
+
 
