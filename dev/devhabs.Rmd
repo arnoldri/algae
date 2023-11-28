@@ -106,3 +106,10 @@ sapply(migr, function(x) range(apply(x,2,sum))) # this is correct
 ```
 
 
+```{r}
+marlborough <- read.csv("data/marlborough.csv")
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+points(marlborough$x, marlborough$y, pch=16, col="red", cex=0.4)
+#box(); axis(1); axis(2)
+```
