@@ -31,13 +31,15 @@ coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
 ```
 
 ```{r}
-#list.files("data/")
+list.files("data/")
 ```
 
 
 ```{r}
 habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
 habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
+marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons.geojson")
+marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
 #plot(habspoly_sf)
 #ggplot(geo) + geom_sf(aes(fill = SA2_NAME)) + guides(fill = guide_none())
 ```
@@ -47,6 +49,14 @@ plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=yli
 rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
 plot(st_geometry(habspoly_sf), col="yellow", add=TRUE)
 plot(st_geometry(st_centroid(habspoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
+#box(); axis(1); axis(2)
+```
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(marlpoly_sf), col="yellow", add=TRUE)
+plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
 #box(); axis(1); axis(2)
 ```
 
@@ -84,11 +94,16 @@ par(opar)
 Connection and migration matrices
 ```{r}
 list.files("data/")
-fname <- "data/Connectivity_matrices_04_to_07_2018.xlsx"
-conn <- lapply(1:13, function(i) read_excel(fname, sheet=i, col_names=FALSE))
+#fname <- "data/Connectivity_matrices_04_to_07_2018.xlsx"
+fname <- "data/connectivity_matrix.xlsx"
+nsheets <- length(excel_sheets(fname))
+conn <- lapply(1:nsheets, function(i) read_excel(fname, sheet=i, col_names=FALSE))
 names(conn) <- excel_sheets(fname)
-fname <- "data/Migration_matrices_04_to_07_2018.xls"
-migr <- lapply(1:13, function(i) read_excel(fname, sheet=i, col_names=FALSE))
+
+#fname <- "data/Migration_matrices_04_to_07_2018.xls"
+fname <- "data/migration_matrix.xlsx"
+nsheets <- length(excel_sheets(fname))
+migr <- lapply(1:nsheets, function(i) read_excel(fname, sheet=i, col_names=FALSE))
 names(migr) <- excel_sheets(fname)
 matdates <- as.Date(names(migr),format="%Y%m%d")
 ```
