@@ -59,13 +59,12 @@ plot(st_geometry(marlpoly_sf), col="yellow", add=TRUE)
 plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
 #box(); axis(1); axis(2)
 ```
-https://stackoverflow.com/questions/58225889/clip-polygon-using-linestring
 
+https://stackoverflow.com/questions/58225889/clip-polygon-using-linestring
 ```{r}
 # split a set of polygons into non-overlapping polygons
 # st_intersection(polygons)
 ```
-
 
 Presence Absence data
 ```{r}
