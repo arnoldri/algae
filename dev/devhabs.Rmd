@@ -23,8 +23,12 @@ source("maps.R")
 ```
 ```{r}
 bbox.marlselect <- c(1645,5415,1720,5495)*1000
+bbox.marlselect <- c(1645,5412,1725,5502)*1000
 xlim.marlselect <- bbox.marlselect[c(1,3)]
 ylim.marlselect <- bbox.marlselect[c(2,4)]
+xlim.subset <- c(1660,1675)*1000
+ylim.subset <- c(5425,5440)*1000
+
 bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
                                                  bbox.marlselect[c(2,2,4,4,2)])))
 coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
@@ -38,7 +42,8 @@ list.files("data/")
 ```{r}
 habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
 habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
-marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons.geojson")
+#marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons.geojson")
+marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons_volume.geojson")
 marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
 #plot(habspoly_sf)
 #ggplot(geo) + geom_sf(aes(fill = SA2_NAME)) + guides(fill = guide_none())
@@ -58,7 +63,47 @@ rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect
 plot(st_geometry(marlpoly_sf), col="yellow", add=TRUE)
 plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
 #box(); axis(1); axis(2)
+#rect(1660*1000, 5425*1000, 1675*1000, 5440*1000, border="red", lwd=2)
 ```
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.subset, ylim=ylim.subset); box()
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(marlpoly_sf), col="yellow", add=TRUE)
+plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
+rect(xlim.subset[1], ylim.subset[1], xlim.subset[2], ylim.subset[2], border="red")
+box(); axis(1); axis(2)
+#rect(1660*1000, 5425*1000, 1675*1000, 5440*1000, border="red", lwd=2)
+```
+```{r}
+#xx <- st_intersection(marlpoly_sf, coast.marlselect)
+xx <- st_difference(marlpoly_sf, coast.marlselect)
+##x2 <- st_difference(coast.marlselect, marlpoly_sf)
+```
+```{r, warn=FALSE, message=FALSE}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.subset, ylim=ylim.subset); box()
+plot(st_geometry(xx), col="yellow", add=TRUE)
+plot(st_geometry(st_centroid(xx)), pch="+", col="red", cex=0.7, add=TRUE)
+plot(st_geometry(coast.marlselect), col=NA, border="blue", add=TRUE)
+```
+
+```{r, warn=FALSE, message=FALSE}
+plot(st_geometry(marlpoly_sf), xlim=xlim.subset, ylim=ylim.subset, col="#44000022")
+plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
+plot(st_geometry(coast.marlselect), col="#00440022", border="blue", add=TRUE)
+```
+
+
+```{r, warn=FALSE, message=FALSE}
+plot(st_geometry(marlpoly_sf), xlim=xlim.subset, ylim=ylim.subset)
+plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
+plot(st_geometry(coast.marlselect), col=NA, border="blue", add=TRUE)
+plot(st_geometry(xx), border="green", add=TRUE)
+plot(st_geometry(st_centroid(xx)), pch="x", col="orange", add=TRUE)
+```
+
+
+
 
 https://stackoverflow.com/questions/58225889/clip-polygon-using-linestring
 ```{r}
@@ -116,14 +161,14 @@ matdates <- as.Date(names(migr),format="%Y%m%d")
 
 ```{r}
 # rows are sources, columns are receiving locations
-sapply(conn, dim) # all 40 by 40
-sapply(migr, dim) # all 40 by 40
+sapply(conn, dim) # all 408 by 408
+sapply(migr, dim) # all 408 by 408
 # conn is the gives the proportion of particles form the source that end up in the receiving polygon
 # if this were a complete tiling of the area then the row sums would be 1
-sapply(conn, function(x) range(apply(x,1,sum))) # because this is not a complete tiling then many particles are lost
+sapply(conn, function(x) range(apply(x,1,sum,na.rm=TRUE))) # because this is not a complete tiling then many particles are lost
 # migr gives the proportion of particles arriving in the receiver that come from the source
 # the column sums are all 1 
-sapply(migr, function(x) range(apply(x,2,sum))) # this is correct
+sapply(migr, function(x) range(apply(x,2,sum,na.rm=TRUE))) # this is correct
 ```
 
 
