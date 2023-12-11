@@ -78,6 +78,7 @@ box(); axis(1); axis(2)
 ```{r}
 #xx <- st_intersection(marlpoly_sf, coast.marlselect)
 xx <- st_difference(marlpoly_sf, coast.marlselect)
+<<<<<<< HEAD
 ##x2 <- st_difference(coast.marlselect, marlpoly_sf)
 ```
 ```{r, warn=FALSE, message=FALSE}
@@ -102,6 +103,11 @@ plot(st_geometry(xx), border="green", add=TRUE)
 plot(st_geometry(st_centroid(xx)), pch="x", col="orange", add=TRUE)
 ```
 
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.subset, ylim=ylim.subset); box()
+plot(st_geometry(xx), col="yellow", add=TRUE)
+plot(st_geometry(st_centroid(xx)), pch="+", col="red", cex=0.7, add=TRUE)
+```
 
 
 
