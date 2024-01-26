@@ -1,0 +1,20 @@
+---
+title: "ActualData"
+author: "Richard Arnold"
+date: '2024-01-26'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+```
+
+```{r}
+list.files("data/confidential")
+fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
+habdat <- read_excel(fname)
+#View(habdat)
+nrow(habdat) # 292786
+```
+
