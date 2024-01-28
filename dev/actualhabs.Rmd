@@ -8,7 +8,11 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(readxl)
+is.unique <- function(x) length(x)==length(unique(x))
 ```
+
+The full dataset is named “All MSQP phyto data to 01.05.23”. 
+Coordinates for the sampling sites are located in the “Raw_MSQP_Locations”.
 
 ```{r}
 list.files("data/confidential")
@@ -16,5 +20,41 @@ fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
 habdat <- read_excel(fname)
 #View(habdat)
 nrow(habdat) # 292786
+habdat[1:2,]
+```
+
+```{r}
+fname <- paste0("data/confidential/","Raw_MSQP_Locations.csv")
+habloc <- read.csv(fname)
+#View(habloc)
+nrow(habloc) # 306
+habloc[1:2,]
+```
+
+```{r}
+is.unique(habloc$siteID) # TRUE
+is.unique(habdat$Site_Code) # FALSE
+all(habdat$Site_Code %in% habloc$siteID) # FALSE
+sum(habdat$Site_Code %in% habloc$siteID)    # 101842
+sum(!(habdat$Site_Code %in% habloc$siteID)) # 190944
+nrow(habdat) # 292786
+sum(habdat$Site_Code %in% habloc$siteID)+sum(!(habdat$Site_Code %in% habloc$siteID)) # 292786
+
+table(habdat$Site_Code[(habdat$Site_Code %in% habloc$siteID)]) # G and PG sites only
+length(table(habdat$Site_Code[(habdat$Site_Code %in% habloc$siteID)])) # 156 sites
+
+table(habdat$Site_Code[!(habdat$Site_Code %in% habloc$siteID)]) # some G and PG sites (G02, G06, G09, PG254, PG271, PG272)
+# looks like G02, G06, G09 may be mislabelled?  should be G002, G006, G009? - esp relevant since G009 is Nydia Bay?
+
+table(habloc$siteID[!(habloc$siteID %in% habdat$Site_Code)])
+```
+
+```{r}
+library(rjson)
+list.files("../../data/confidential/MSQP_dataset/")
+fname <- "../../data/confidential/MSQP_dataset/Raw_MSQP.json"
+file.exists(fname)
+jdat <- fromJSON(file=fname, simplify=TRUE)
+#fromJSON("../../../data/confidential")
 ```
 
