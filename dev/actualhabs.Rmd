@@ -14,7 +14,7 @@ is.unique <- function(x) length(x)==length(unique(x))
 The full dataset is named “All MSQP phyto data to 01.05.23”. 
 Coordinates for the sampling sites are located in the “Raw_MSQP_Locations”.
 
-```{r}
+```{r error=FALSE, warning=FALSE}
 list.files("data/confidential")
 fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
 habdat <- read_excel(fname)
@@ -24,12 +24,27 @@ habdat[1:2,]
 ```
 
 ```{r}
+table(habdat$REPORTED_NAME)
+alexdat <- habdat[grepl("Alexandrium", habdat$REPORTED_NAME),]
+table(alexdat$Site_Code)
+
+table(alexdat$Site_Code[grepl("acific",alexdat$REPORTED_NAME)])
+```
+
+
+```{r}
 fname <- paste0("data/confidential/","Raw_MSQP_Locations.csv")
 habloc <- read.csv(fname)
 #View(habloc)
 nrow(habloc) # 306
 habloc[1:2,]
 ```
+
+```{r}
+idx <- habloc$lon!=0
+plot(habloc$lon[idx], habloc$lat[idx])
+```
+
 
 ```{r}
 is.unique(habloc$siteID) # TRUE
