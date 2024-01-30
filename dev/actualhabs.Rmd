@@ -91,7 +91,7 @@ title("Collection points in Malborough")
 
 
 
-```{r, error=FALSE, message=FALSE}
+```{r, error=FALSE, message=FALSE, warning=FALSE}
 fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
 habdat <- read_excel(fname)
 #View(habdat)

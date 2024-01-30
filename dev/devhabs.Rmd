@@ -78,7 +78,6 @@ box(); axis(1); axis(2)
 ```{r}
 #xx <- st_intersection(marlpoly_sf, coast.marlselect)
 xx <- st_difference(marlpoly_sf, coast.marlselect)
-<<<<<<< HEAD
 ##x2 <- st_difference(coast.marlselect, marlpoly_sf)
 ```
 ```{r, warn=FALSE, message=FALSE}
