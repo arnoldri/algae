@@ -11,13 +11,16 @@ knitr::opts_chunk$set(echo=FALSE, warn=FALSE, message=FALSE)
 
 ```{r}
 load("opar.Rda")
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(ggplot2)
 library(maps)
 library(sf)
-library(dplyr)
 library(geojsonsf)
-library(ggplot2)
-library(readxl)
-library(tidyr)
+
+library(algae)
 source("funcs.R")
 source("maps.R")
 ```
@@ -26,13 +29,22 @@ bbox.marlselect <- c(1645,5415,1720,5495)*1000
 bbox.marlselect <- c(1645,5412,1725,5502)*1000
 xlim.marlselect <- bbox.marlselect[c(1,3)]
 ylim.marlselect <- bbox.marlselect[c(2,4)]
-xlim.subset <- c(1660,1675)*1000
-ylim.subset <- c(5425,5440)*1000
+
+xlim.havelock <- c(1660,1675)*1000
+ylim.havelock <- c(5425,5440)*1000
 
 bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
                                                  bbox.marlselect[c(2,2,4,4,2)])))
 coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
 ```
+
+```{r}
+coast.marlselect
+coast.arapawa <- coast.marlselect %>%
+  filter(str_detect(name, "Arapawa"))
+coast.arapawa
+```
+
 
 ```{r}
 list.files("data/")
@@ -49,6 +61,8 @@ marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
 #ggplot(geo) + geom_sf(aes(fill = SA2_NAME)) + guides(fill = guide_none())
 ```
 
+Just a small number of key polygons
+
 ```{r}
 plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
 rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
@@ -57,6 +71,8 @@ plot(st_geometry(st_centroid(habspoly_sf)), pch="+", col="red", cex=0.7, add=TRU
 #box(); axis(1); axis(2)
 ```
 
+Full tiling of Marlborough
+
 ```{r}
 plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
 rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
@@ -66,36 +82,89 @@ plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRU
 #rect(1660*1000, 5425*1000, 1675*1000, 5440*1000, border="red", lwd=2)
 ```
 
+Zoom in to area near Havelock and Mahau Sound
+
 ```{r}
-plot(coast.marlselect$geometry, col="dark green", xlim=xlim.subset, ylim=ylim.subset); box()
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.havelock, ylim=ylim.havelock); box()
 rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
 plot(st_geometry(marlpoly_sf), col="yellow", add=TRUE)
 plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
-rect(xlim.subset[1], ylim.subset[1], xlim.subset[2], ylim.subset[2], border="red")
+rect(xlim.havelock[1], ylim.havelock[1], xlim.havelock[2], ylim.havelock[2], border="red")
 box(); axis(1); axis(2)
 #rect(1660*1000, 5425*1000, 1675*1000, 5440*1000, border="red", lwd=2)
 ```
+
+```{r}
+# check coordinate reference system CRS
+#st_crs(marlpoly_sf)
+st_crs(marlpoly_sf) == st_crs(coast.marlselect)
+```
+
+```{r}
+plot(coast.marlselect$geometry, col="darkgreen")
+plot((coast.marlselect %>% filter(str_detect(name, "Arapawa")))$geometry, col="darkgreen")
+```
+
+```{r}
+marlpoly.arapawa <- marlpoly_sf %>% 
+                      filter(st_crosses(marlpoly_sf, coast.arapawa))
+plot(marlpoly.arapawa)
+stx <- st_intersects(marlpoly_sf, coast.arapawa)
+```
+
+
+```{r}
+plot(coast.arapawa$geometry, col="darkgreen"); plot(marlpoly_sf$geometry, add=TRUE, col="#00007722")
+plot(st_difference(coast.arapawa, marlpoly_sf)$geometry, col="darkgreen"); plot(marlpoly_sf$geometry, add=TRUE)
+plot(st_difference(marlpoly_sf, coast.arapawa)$geometry, col="darkgreen"); plot(marlpoly_sf$geometry, add=TRUE)
+```
+
+
+Find only those parts of the tiling polygons that are not on land
+
 ```{r}
 #xx <- st_intersection(marlpoly_sf, coast.marlselect)
-xx <- st_difference(marlpoly_sf, coast.marlselect)
+xx <- st_difference(marlpoly_sf, coast.marlselect)  ## 18768 features
+#st_is_valid(xx)
 ##x2 <- st_difference(coast.marlselect, marlpoly_sf)
 ```
+
+```{r}
+xx.arapawa <- xx %>%
+  filter(str_detect(name, "Arapawa"))
+plot(xx.arapawa)
+```
+
+
+```{r}
+coast.marlselect # 46 features
+marlpoly_sf # 408 features
+is.unique(marlpoly_sf$CLUSTER_ID)
+is.unique(xx$CLUSTER_ID)
+```
+
+
+```{r}
+plot(st_geometry(xx), xlim=xlim.havelock, ylim=ylim.havelock)
+```
+
+
 ```{r, warn=FALSE, message=FALSE}
-plot(coast.marlselect$geometry, col="dark green", xlim=xlim.subset, ylim=ylim.subset); box()
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.havelock, ylim=ylim.havelock); box()
 plot(st_geometry(xx), col="yellow", add=TRUE)
 plot(st_geometry(st_centroid(xx)), pch="+", col="red", cex=0.7, add=TRUE)
 plot(st_geometry(coast.marlselect), col=NA, border="blue", add=TRUE)
 ```
 
 ```{r, warn=FALSE, message=FALSE}
-plot(st_geometry(marlpoly_sf), xlim=xlim.subset, ylim=ylim.subset, col="#44000022")
+plot(st_geometry(marlpoly_sf), xlim=xlim.havelock, ylim=ylim.havelock, col="#44000022")
 plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
 plot(st_geometry(coast.marlselect), col="#00440022", border="blue", add=TRUE)
 ```
 
 
 ```{r, warn=FALSE, message=FALSE}
-plot(st_geometry(marlpoly_sf), xlim=xlim.subset, ylim=ylim.subset)
+plot(st_geometry(marlpoly_sf), xlim=xlim.havelock, ylim=ylim.havelock)
 plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
 plot(st_geometry(coast.marlselect), col=NA, border="blue", add=TRUE)
 plot(st_geometry(xx), border="green", add=TRUE)
@@ -103,7 +172,7 @@ plot(st_geometry(st_centroid(xx)), pch="x", col="orange", add=TRUE)
 ```
 
 ```{r}
-plot(coast.marlselect$geometry, col="dark green", xlim=xlim.subset, ylim=ylim.subset); box()
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.havelock, ylim=ylim.havelock); box()
 plot(st_geometry(xx), col="yellow", add=TRUE)
 plot(st_geometry(st_centroid(xx)), pch="+", col="red", cex=0.7, add=TRUE)
 ```
@@ -184,3 +253,5 @@ rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect
 points(marlborough$x, marlborough$y, pch=16, col="red", cex=0.4)
 #box(); axis(1); axis(2)
 ```
+
+

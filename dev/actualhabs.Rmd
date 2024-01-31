@@ -13,13 +13,16 @@ is.unique <- function(x) length(x)==length(unique(x))
 
 ```{r}
 load("opar.Rda")
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(ggplot2)
 library(maps)
 library(sf)
-library(dplyr)
 library(geojsonsf)
-library(ggplot2)
-library(readxl)
-library(tidyr)
+
+library(algae)
 source("funcs.R")
 source("maps.R")
 ```

@@ -1,3 +1,10 @@
+#' Check for uniqueness
+#'
+#' @description Check for uniqueness
+#'
+#' @export
+is.unique <- function(x) length(x)==length(unique(x))
+
 #' Run the pacman 00LOCK file destroyer
 #'
 #' @description Stop 00LOCK files getting in the way of package builds
