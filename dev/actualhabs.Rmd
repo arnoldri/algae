@@ -39,6 +39,8 @@ xlim.marlselect <- bbox.marlselect[c(1,3)]
 ylim.marlselect <- bbox.marlselect[c(2,4)]
 xlim.havelock <- c(1660,1675)*1000
 ylim.havelock <- c(5425,5440)*1000
+xlim.nydia <- c(1662,1677)*1000
+ylim.nydia <- c(5437,5450)*1000
 xlim.arapawa <- c(1695,1718)*1000
 ylim.arapawa <- c(5432,5452)*1000
 
@@ -59,6 +61,9 @@ marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
 
 marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
 
+globalcrs <- 4326
+marlcrs <- st_crs(marlpoly_sf.trim)
+
 getmatrices <- TRUE
 getmatrices <- FALSE
 if(getmatrices) {
@@ -77,6 +82,43 @@ if(getmatrices) {
 }
 ```
 
+```{r}
+plot(st_geometry(coast.marlselect), col="darkgreen", reset=FALSE, xlim=xlim.havelock, ylim=ylim.havelock,
+     main="Original polygons")
+plot(st_geometry(marlpoly_sf), col="yellow", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf)), pch="+", col="red", add=TRUE)
+```
+
+```{r}
+plot(st_geometry(coast.marlselect), col="darkgreen", reset=FALSE, xlim=xlim.havelock, ylim=ylim.havelock,
+     main="Trimmed polygons")
+plot(st_geometry(marlpoly_sf.trim), col="yellow", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="red", add=TRUE)
+```
+
+```{r}
+plot(st_geometry(coast.marlselect), col="darkgreen", reset=FALSE,
+     main="Trimmed polygons")
+plot(st_geometry(marlpoly_sf.trim), col="yellow", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="red", add=TRUE)
+```
+
+Volumes by colour
+
+```{r}
+plot((marlpoly_sf.trim %>% mutate(vol=volume/1e9))["vol"], key.pos=4, reset=FALSE, 
+     main="Polygon volumes and centroids")#, xlim=xlim.havelock, ylim=ylim.havelock)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+```
+
+```{r}
+plot((marlpoly_sf.trim %>% mutate(depth=volume/st_area(marlpoly_sf.trim)))["depth"], key.pos=4, reset=FALSE, 
+     main="Polygon mean depths and centroids")#, xlim=xlim.havelock, ylim=ylim.havelock)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+```
+
 
 From Romain:
 
@@ -86,14 +128,183 @@ Coordinates for the sampling sites are located in the “Raw_MSQP_Locations”.
 Questions for Romain:
 
 1. there are 306 locations -- all are GNNNA or PGNNNA (NNN=three numeric digits)(A=letter A-Q) 
-1. location PG121 has no coordinates (lon=0, lat=0)
-1. 
+1. location PG121 (Onepipi) has no coordinates (lon=0, lat=0) should be as follows?
+          lon       lat       x       y
+     174.3733 -41.13811 1715253 5445003
+1. 86 of the locations have the same NNN designation, just with P or PG, and the same location
+   Of the others with the same NNN most seem to be the close in location and name, 
+   but a few (PG121  Onepipi and G121 Nydia) are long way apart.
+   Which locations do we actual want to use?  Should we only use SITETYPE="PHYTO" (i.e. remove
+   "ESTAR" - and there are two woth no SITETYPE: G114, G119 - I guess these should be "ESTAR"?)
+1. 11 of the locations are not in any of the ocean polygons - some fall outside of the polygon
+   tiling (e.g. Durville), but others are on land but close to the sea
+1. In the detection data, which REPORTED_NAME values should we use?  
+  e.g. All beginnning with "Alexandrium" or just "Alexandriam catanella" and "Alexandrium pacificum"?
+  it'd be good to understand how to filter this data set as a whole - this might need a zoom call perhaps
 
 ```{r}
 list.files("data/confidential")
 ```
 
 Locations
+
+```{r}
+fname <- paste0("data/confidential/","Raw_MSQP_Locations.csv")
+habloc <- read.csv(fname)
+#View(habloc)
+nrow(habloc) # 306
+habloc[1:2,]
+
+is.unique(habloc$siteID) # TRUE
+table(habloc$SITETYPE) # "", "ESTAR" and "PHYTO"
+#      ESTAR PHYTO 
+#    2   198   106 
+table(habloc$SITETYPE, substring(habloc$siteID,1,1))
+#          G   P
+#          2   0
+#  ESTAR 197   1
+#  PHYTO   0 106
+
+# are the P and G sites the same?
+hp <- habloc%>%filter(substring(siteID,1,1)=="P")  
+hg <- habloc%>%filter(substring(siteID,1,1)=="G")
+hp$siteNumber <- substring(hp$siteID,3)
+hg$siteNumber <- substring(hg$siteID,2)
+is.unique(hp$siteNumber) # TRUE
+is.unique(hg$siteNumber) # TRUE
+hpg <- merge(hp,hg,all=TRUE,by="siteNumber",suffixes=c(".p",".g"))
+hpg$dx <- hpg$x.p-hpg$x.g
+hpg$dy <- hpg$y.p-hpg$y.g
+hpg[1:2,]
+idx <- !is.na(hpg$x.p) & !is.na(hpg$x.g)
+nrow(hpg[idx,]) # 103
+# many differences are zero
+table(hpg[idx,]$lon.p-hpg[idx,]$lon.g) # 87 are zero out of 103
+table(hpg[idx,]$lat.p-hpg[idx,]$lat.g) # 88 are zero out of 103
+table(hpg$dx) # 86 are zero out of 103
+table(hpg$dy) # 86 are zero out of 103
+hpg$matched <- FALSE
+hpg$matched[idx] <- hpg$dx[idx]==0 & hpg$dy[idx]==0
+table(hpg$matched) # FALSE=117, TRUE=86
+table(hpg$matched[idx]) # FALSE=17, TRUE=86
+View(hpg[idx & !hpg$matched,])
+# particular bad match is PG121 (Onepipi) and G121 (Nydia Bay Mouth)
+
+range(habloc$lon) # min is zero
+habloc[habloc$lon==0,] # Location PG121 has lon=0, lat=0: Onepipi
+## lon=174.37325650  lat=-41.13810965
+onepipi <- data.frame(lon=174.37325650, lat=-41.13810965)
+onepipi.lonlat <- st_as_sf(onepipi,
+                           coords=c("lon","lat"),
+                           crs=globalcrs,
+                           agr="constant")
+onepipi.xy <- st_transform(onepipi.lonlat, marlcrs)
+xy <- unclass(onepipi.xy$geometry[[1]])
+onepipi$x <- xy[1]; onepipi$y <- xy[2]
+onepipi
+
+ra_getxy(onepipi.xy)
+```
+
+```{r}
+plot(st_geometry(coast.marlselect), xlim=xlim.arapawa, ylim=ylim.arapawa, reset=FALSE)
+plot(onepipi.xy, add=TRUE, pch="+", col="red")
+```
+
+```{r}
+habloc_sf <- st_as_sf(habloc, 
+                      coords=c("x","y"),
+                      crs=marlcrs,
+                      agr="constant")
+```
+
+
+```{r}
+plot(coast.tasmar$geometry, col="dark green", reset=FALSE, xlim=xlim.tasmar, ylim=ylim.tasmar)
+rect(xlim.tasmar[1], ylim.tasmar[1], xlim.tasmar[2], ylim.tasmar[2])
+plot(st_geometry(habloc_sf), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Tasman/Malborough")
+```
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect)
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(habloc_sf), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Malborough")
+```
+
+Identify which polygons these fall into
+
+```{r}
+habloc_sf <- habloc_sf %>% 
+  mutate(intersection=as.integer(st_intersects(geometry, marlpoly_sf)),
+         CLUSTER_ID=if_else(is.na(intersection),NA,marlpoly_sf$CLUSTER_ID[intersection])) %>%
+  select(-intersection)
+```
+
+```{r}
+siteid <- "G009"
+cid <- habloc_sf$CLUSTER_ID[habloc_sf$siteID==siteid]
+plot(st_geometry(coast.marlselect), reset=FALSE, xlim=xlim.nydia, ylim=ylim.nydia, col="darkgreen",
+     main=habloc_sf$site_name[habloc_sf$siteID==siteid])
+plot(st_geometry(marlpoly_sf.trim %>% filter(CLUSTER_ID==cid)), col="yellow", add=TRUE)
+plot(st_geometry(habloc_sf %>% filter(siteID==siteid)), pch=16, col="red", cex=1, add=TRUE)
+axis(1); axis(2); box()
+```
+
+Which points are not matched to a polygon?
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect)
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(habloc_sf %>% filter(is.na(CLUSTER_ID))), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Malborough\nnot matched to an ocean polygon")
+```
+
+```{r}
+idx <- sapply(st_within(habloc_sf, bbox.marlselect.polygon),length)==1
+#View(habloc_sf %>% filter(is.na(CLUSTER_ID) & idx)) #%>% as.data.frame()
+habloc_sf %>% filter(is.na(CLUSTER_ID) & idx) %>% st_drop_geometry()
+## 11 sites, 2 are repeats
+```
+
+     X siteID       site_name SITETYPE     lon     lat CLUSTER_ID
+1   76   G062        Durville    ESTAR 173.709 -40.921         NA
+2  100   G086      Head Nikau    ESTAR 173.896 -41.170         NA
+3  110   G096        Te Mahia    ESTAR 173.576 -41.126         NA
+4  119   G105      Black Rock    ESTAR 174.047 -41.114         NA
+5  142   G128   Cook Strait 1    ESTAR 174.297 -41.395         NA
+6   13  PG017     Anakoha Bay    PHYTO 174.107 -41.054         NA
+7   43  PG062        Durville    PHYTO 173.709 -40.921         NA
+8   53  PG086      Head Nikau    PHYTO 173.896 -41.170         NA
+9   65  PG111   KENEPURU HEAD    PHYTO 174.069 -41.110         NA
+10  76  PG128 Robertson Point    PHYTO 174.297 -41.395         NA
+11  91  PG237     Port Gore 3    PHYTO 174.252 -41.067         NA
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.nydia, ylim=ylim.nydia, reset=FALSE)
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(marlpoly_sf),col="yellow",add=TRUE)
+plot(st_geometry(habloc_sf %>% filter(is.na(CLUSTER_ID))), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points near Nydia Bay\nnot matched to an ocean polygon")
+```
+
+
+Detections
+
+```{r, error=FALSE, message=FALSE, warning=FALSE}
+fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
+habdat <- read_excel(fname)
+#View(habdat)
+nrow(habdat) # 292786
+habdat[1:2,]
+```
+
+
 
 ```{r}
 table(habdat$REPORTED_NAME)
@@ -104,41 +315,6 @@ table(alexdat$Site_Code[grepl("acific",alexdat$REPORTED_NAME)])
 ```
 
 
-```{r}
-fname <- paste0("data/confidential/","Raw_MSQP_Locations.csv")
-habloc <- read.csv(fname)
-#View(habloc)
-nrow(habloc) # 306
-habloc[1:2,]
-
-range(habloc$lon) # min is zero
-habloc[habloc$lon==0,] # Location PG121 has lon=0, lat=0
-```
-
-
-```{r}
-plot(coast.tasmar$geometry, col="dark green", xlim=xlim.tasmar, ylim=ylim.tasmar); box()
-rect(xlim.tasmar[1], ylim.tasmar[1], xlim.tasmar[2], ylim.tasmar[2])
-points(habloc$x, habloc$y, pch=16, col="red")
-title("Collection points in Tasman/Malborough")
-```
-
-```{r}
-plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
-rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
-points(habloc$x, habloc$y, pch=16, col="red")
-title("Collection points in Malborough")
-```
-
-
-
-```{r, error=FALSE, message=FALSE, warning=FALSE}
-fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
-habdat <- read_excel(fname)
-#View(habdat)
-nrow(habdat) # 292786
-habdat[1:2,]
-```
 
 
 ```{r}

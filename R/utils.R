@@ -1,3 +1,8 @@
+#' SF functions
+#'
+#' @export
+ra_getxy <- function(x) unclass(x$geometry[[1]])
+
 #' Check for uniqueness
 #'
 #' @description Check for uniqueness
