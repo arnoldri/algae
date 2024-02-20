@@ -53,16 +53,6 @@ coast.si
 ```
 
 ```{r}
-for(i in 1:nrow(coast.marlselect)) {
-  plot(st_geometry(coast.marlselect[i,]), col="darkgreen", xlim=xlim.marlselect, ylim=ylim.marlselect)
-  title(paste(i,coast.marlselect$name[i]))
-}
-
-```
-
-
-
-```{r}
 list.files("data/")
 ```
 
@@ -208,14 +198,6 @@ stx <- st_crosses(marlpoly.arasi.trim, coast.arasi)
 all(sapply(stx,length)==0) # TRUE - the objects are touching or disjoint
 ```
 
-```{r}
-nrow(marlpoly_sf) # 408
-nrow(marlpoly_sf.trim) # 408
-nrow(marlpoly.arasi) # 213
-nrow(marlpoly.arasi.trim) # 213
-nrow(marlpoly.si) # 196
-nrow(marlpoly.si.trim) # 196
-```
 
 Find only those parts of the tiling polygons that are not on land
 
@@ -226,15 +208,6 @@ marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect)  ## 18768 features
 #st_is_valid(xx)
 ##x2 <- st_difference(coast.marlselect, marlpoly_sf)
 ```
-
-Check for any intersection
-```{r}
-# this is slow
-#stx <- st_crosses(marlpoly_sf.trim, coast.marlselect)
-#all(sapply(stx,length)==0) # TRUE - the objects are touching or disjoint
-```
-
-
 
 ```{r}
 coast.marlselect # 46 features
@@ -289,6 +262,15 @@ plot(st_geometry(marlpoly_sf.trim), col="yellow", add=TRUE)
 plot(st_geometry(st_centroid(marlpoly_sf.trim)), pch="+", col="red", cex=0.7, add=TRUE)
 ```
 
+```{r}
+nrow(marlpoly_sf) # 408
+nrow(marlpoly_sf.trim) # 408
+nrow(marlpoly.arasi) # 213
+nrow(marlpoly.arasi.trim) # 213
+nrow(marlpoly.si) # 196
+nrow(marlpoly.si.trim) # 196
+```
+
 
 Presence Absence data
 ```{r}
@@ -306,7 +288,7 @@ habssites <- habssites[order(habssites$ID),]
 habs <- pivot_longer(habswide, cols=names(habswide)[-(1:2)], names_to="date", values_to="present")
 habs$date <- gsub("'","",habs$date)
 habs$date <- as.Date(habs$date, format="%d-%b-%Y")
-#habs[1:5,]
+#View(habs[1:5,])
 ```
 
 ```{r}

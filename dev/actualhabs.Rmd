@@ -7,12 +7,11 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(readxl)
-is.unique <- function(x) length(x)==length(unique(x))
 ```
 
 ```{r}
 load("opar.Rda")
+library(readxl)
 library(dplyr)
 library(tidyverse)
 library(tidyr)
@@ -27,6 +26,8 @@ library(algae)
 source("funcs.R")
 source("maps.R")
 ```
+
+Subsets of Tasman/Marlborough
 
 ```{r}
 bbox.tasmar <- c(1570,5370,1725,5520)*1000
@@ -63,7 +64,11 @@ marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect)
 
 globalcrs <- 4326
 marlcrs <- st_crs(marlpoly_sf.trim)
+```
 
+Migration matrices
+
+```{r}
 getmatrices <- TRUE
 getmatrices <- FALSE
 if(getmatrices) {
@@ -82,6 +87,8 @@ if(getmatrices) {
 }
 ```
 
+Plot examples
+
 ```{r}
 plot(st_geometry(coast.marlselect), col="darkgreen", reset=FALSE, xlim=xlim.havelock, ylim=ylim.havelock,
      main="Original polygons")
@@ -95,6 +102,8 @@ plot(st_geometry(coast.marlselect), col="darkgreen", reset=FALSE, xlim=xlim.have
 plot(st_geometry(marlpoly_sf.trim), col="yellow", add=TRUE)
 plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="red", add=TRUE)
 ```
+
+Full region
 
 ```{r}
 plot(st_geometry(coast.marlselect), col="darkgreen", reset=FALSE,
@@ -128,19 +137,37 @@ Coordinates for the sampling sites are located in the “Raw_MSQP_Locations”.
 Questions for Romain:
 
 1. there are 306 locations -- all are GNNNA or PGNNNA (NNN=three numeric digits)(A=letter A-Q) 
+   [we only want the PG and G ones]
+
 1. location PG121 (Onepipi) has no coordinates (lon=0, lat=0) should be as follows?
           lon       lat       x       y
      174.3733 -41.13811 1715253 5445003
+
+   from Romain: -41.138812 174.368901
+
 1. 86 of the locations have the same NNN designation, just with P or PG, and the same location
    Of the others with the same NNN most seem to be the close in location and name, 
    but a few (PG121  Onepipi and G121 Nydia) are long way apart.
    Which locations do we actual want to use?  Should we only use SITETYPE="PHYTO" (i.e. remove
-   "ESTAR" - and there are two woth no SITETYPE: G114, G119 - I guess these should be "ESTAR"?)
+   "ESTAR" - and there are two with no SITETYPE: G114, G119 - I guess these should be "ESTAR"?)
+   
+   use all of them
+   
 1. 11 of the locations are not in any of the ocean polygons - some fall outside of the polygon
    tiling (e.g. Durville), but others are on land but close to the sea
+   
+   they are likely just outside
+   
 1. In the detection data, which REPORTED_NAME values should we use?  
   e.g. All beginnning with "Alexandrium" or just "Alexandriam catanella" and "Alexandrium pacificum"?
   it'd be good to understand how to filter this data set as a whole - this might need a zoom call perhaps
+  
+  
+* use data for 2018 and later
+* we should only use Alexandrium pacificum - (catanella should be replaced pacificum, but there shouldn't
+  be any catanella from 2018 onwards) [don't use Alexandrium SPP]
+* sites are available online
+  https://mpi.maps.arcgis.com/apps/webappviewer/index.html?id=fbdacfcb945c46118ff105ee45142fbe
 
 ```{r}
 list.files("data/confidential")
@@ -148,18 +175,20 @@ list.files("data/confidential")
 
 Locations
 
+Note: Onepipi G121 did not have a longitude/latitude (recorded as 0,0): this is corrected in the file "Raw_MSQP_Locations-Corrected.csv"
+
 ```{r}
-fname <- paste0("data/confidential/","Raw_MSQP_Locations.csv")
+fname <- paste0("data/confidential/","Raw_MSQP_Locations-Corrected.csv")
 habloc <- read.csv(fname)
 #View(habloc)
 nrow(habloc) # 306
-habloc[1:2,]
+View(habloc)
 
-is.unique(habloc$siteID) # TRUE
-table(habloc$SITETYPE) # "", "ESTAR" and "PHYTO"
+#is.unique(habloc$siteID) # TRUE
+#table(habloc$SITETYPE,exclude=NULL) # "", "ESTAR" and "PHYTO"
 #      ESTAR PHYTO 
 #    2   198   106 
-table(habloc$SITETYPE, substring(habloc$siteID,1,1))
+#table(habloc$SITETYPE, substring(habloc$siteID,1,1), exclude=NULL)
 #          G   P
 #          2   0
 #  ESTAR 197   1
@@ -193,7 +222,9 @@ View(hpg[idx & !hpg$matched,])
 range(habloc$lon) # min is zero
 habloc[habloc$lon==0,] # Location PG121 has lon=0, lat=0: Onepipi
 ## lon=174.37325650  lat=-41.13810965
-onepipi <- data.frame(lon=174.37325650, lat=-41.13810965)
+#onepipi <- data.frame(lon=174.37325650, lat=-41.13810965)
+## lon=174.368901, lat=-41.138812
+onepipi <- data.frame(lon=174.368901, lat=-41.138812)
 onepipi.lonlat <- st_as_sf(onepipi,
                            coords=c("lon","lat"),
                            crs=globalcrs,
@@ -203,7 +234,9 @@ xy <- unclass(onepipi.xy$geometry[[1]])
 onepipi$x <- xy[1]; onepipi$y <- xy[2]
 onepipi
 
-ra_getxy(onepipi.xy)
+#x=1714893.2113, y=5444907.4273
+
+ra_getxy(onepipi.xy) #1714886 5444930
 ```
 
 ```{r}
