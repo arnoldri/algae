@@ -177,9 +177,51 @@ Locations
 
 Note: Onepipi G121 did not have a longitude/latitude (recorded as 0,0): this is corrected in the file "Raw_MSQP_Locations-Corrected.csv"
 
+Use all of these
+
 ```{r}
 fname <- paste0("data/confidential/","Raw_MSQP_Locations-Corrected.csv")
 habloc <- read.csv(fname)
+# convert locations to sf object
+habloc_sf <- st_as_sf(habloc %>% mutate(xp=x,yp=y), 
+                      coords=c("xp","yp"),
+                      crs=marlcrs,
+                      agr="constant")
+# identify which polygon each location falls into
+habloc_sf <- habloc_sf %>% 
+  mutate(intersection=as.integer(st_intersects(geometry, marlpoly_sf)),
+         CLUSTER_ID=if_else(is.na(intersection),NA,marlpoly_sf$CLUSTER_ID[intersection])) %>%
+  select(-intersection)
+```
+
+Also get locations from the MPI website - but these are confusing, so we won't use them
+
+```{r}
+fnamempi1 <- paste0("data/confidential/","Marine_biotoxin_sample_site_locations_-_View.csv")
+fnamempi2 <- paste0("data/confidential/","Non-Commercial_Regular_Sites_for_the_Shellfish_Biotoxin_-_View.csv")
+mpiloc1 <- read.csv(fnamempi1)
+mpiloc2 <- read.csv(fnamempi2)
+names(mpiloc1)[1:2] <- c("lon","lat")
+any(mpiloc1$code %in% habloc$siteID) # yes
+any(mpiloc2$code %in% habloc$siteID) # none
+all(habloc$siteID %in% mpiloc1$code) # no
+is.unique(mpiloc1$code) # FALSE
+mpiloc1.u <- do.call(rbind, by(mpiloc1, mpiloc1$code, function(x) x[1,,drop=FALSE]))
+is.unique(mpiloc1.u$code) # TRUE
+habloc_sf <- merge(habloc_sf, mpiloc1.u, by.x="siteID", by.y="code", all.x=TRUE, suffix=c("",".mpi"))
+nrow(habloc_sf) # 306
+
+habloc <- habloc_sf %>% st_drop_geometry()
+```
+
+```{r}
+habloc$dd <- sqrt((habloc$lon-habloc$lon.mpi)^2 + (habloc$lat-habloc$lat.mpi)^2)
+hist(habloc$dd, breaks=50)
+habloc[!is.na(habloc$dd) & habloc$dd>0.1,]
+```
+
+
+```{r}
 #View(habloc)
 nrow(habloc) # 306
 View(habloc)
@@ -224,33 +266,18 @@ habloc[habloc$lon==0,] # Location PG121 has lon=0, lat=0: Onepipi
 ## lon=174.37325650  lat=-41.13810965
 #onepipi <- data.frame(lon=174.37325650, lat=-41.13810965)
 ## lon=174.368901, lat=-41.138812
-onepipi <- data.frame(lon=174.368901, lat=-41.138812)
-onepipi.lonlat <- st_as_sf(onepipi,
-                           coords=c("lon","lat"),
-                           crs=globalcrs,
-                           agr="constant")
-onepipi.xy <- st_transform(onepipi.lonlat, marlcrs)
-xy <- unclass(onepipi.xy$geometry[[1]])
-onepipi$x <- xy[1]; onepipi$y <- xy[2]
-onepipi
-
+#onepipi <- data.frame(lon=174.368901, lat=-41.138812)
+#onepipi.lonlat <- st_as_sf(onepipi,
+#                           coords=c("lon","lat"),
+#                           crs=globalcrs,
+#                           agr="constant")
+#onepipi.xy <- st_transform(onepipi.lonlat, marlcrs)
+#xy <- unclass(onepipi.xy$geometry[[1]])
+#onepipi$x <- xy[1]; onepipi$y <- xy[2]
+#onepipi
 #x=1714893.2113, y=5444907.4273
-
-ra_getxy(onepipi.xy) #1714886 5444930
+#ra_getxy(onepipi.xy) #1714886 5444930
 ```
-
-```{r}
-plot(st_geometry(coast.marlselect), xlim=xlim.arapawa, ylim=ylim.arapawa, reset=FALSE)
-plot(onepipi.xy, add=TRUE, pch="+", col="red")
-```
-
-```{r}
-habloc_sf <- st_as_sf(habloc, 
-                      coords=c("x","y"),
-                      crs=marlcrs,
-                      agr="constant")
-```
-
 
 ```{r}
 plot(coast.tasmar$geometry, col="dark green", reset=FALSE, xlim=xlim.tasmar, ylim=ylim.tasmar)
@@ -268,14 +295,7 @@ plot(st_geometry(habloc_sf), pch=16, col="red", add=TRUE)
 title("Collection points in Malborough")
 ```
 
-Identify which polygons these fall into
-
-```{r}
-habloc_sf <- habloc_sf %>% 
-  mutate(intersection=as.integer(st_intersects(geometry, marlpoly_sf)),
-         CLUSTER_ID=if_else(is.na(intersection),NA,marlpoly_sf$CLUSTER_ID[intersection])) %>%
-  select(-intersection)
-```
+Plot collection points within polygons
 
 ```{r}
 siteid <- "G009"
@@ -300,8 +320,17 @@ title("Collection points in Malborough\nnot matched to an ocean polygon")
 ```{r}
 idx <- sapply(st_within(habloc_sf, bbox.marlselect.polygon),length)==1
 #View(habloc_sf %>% filter(is.na(CLUSTER_ID) & idx)) #%>% as.data.frame()
-habloc_sf %>% filter(is.na(CLUSTER_ID) & idx) %>% st_drop_geometry()
+outofarea_sf <- habloc_sf %>% filter(is.na(CLUSTER_ID) & idx) 
+outofarea_sf
 ## 11 sites, 2 are repeats
+
+# Find the closest polygon
+closest <- list()
+for(i in seq_len(nrow(outofarea_sf))){
+    closest[[i]] <- marlpoly_sf.trim[which.min(st_distance(marlpoly_sf.trim, outofarea_sf[i,])),]
+}
+outofarea_sf$CLUSTER_ID_closest <- sapply(closest, function(x) x$CLUSTER_ID)
+outofarea <- outofarea_sf %>% st_drop_geometry()
 ```
 
      X siteID       site_name SITETYPE     lon     lat CLUSTER_ID
@@ -316,6 +345,52 @@ habloc_sf %>% filter(is.na(CLUSTER_ID) & idx) %>% st_drop_geometry()
 9   65  PG111   KENEPURU HEAD    PHYTO 174.069 -41.110         NA
 10  76  PG128 Robertson Point    PHYTO 174.297 -41.395         NA
 11  91  PG237     Port Gore 3    PHYTO 174.252 -41.067         NA
+
+
+```{r}
+for(i in seq_len(nrow(outofarea_sf))) {
+  sid <- outofarea_sf$siteID[i]
+  sname <- outofarea_sf$site_name[i]
+  cid <- outofarea_sf$CLUSTER_ID_closest[i]
+  idx <- habloc$siteID==sid
+  xy <- c(habloc$x[idx], habloc$y[idx])
+  plot(st_geometry(coast.marlselect), reset=FALSE, col="darkgreen",
+       xlim=xy[1]+c(-1,1)*8000,
+       ylim=xy[2]+c(-1,1)*8000,
+       main=paste0("Site ", sid, " Polygon ",cid, " (",sname,")"))
+  plot(st_geometry(marlpoly_sf.trim %>% filter(CLUSTER_ID==cid)), col="yellow", add=TRUE)
+  plot(st_geometry(outofarea_sf %>% filter(siteID==sid)), pch=16, col="red", cex=1, add=TRUE)
+  axis(1); axis(2); box()
+}
+```
+
+ - G062 - D'Urville - fully outside tiled region - no match: remove
+ - G086 - Head Nikau - close to shore - OK retain
+ - G096 - Te Mahia - on land - and a long way in: clearly wrong!  On MPI map Te Mahia should be at x=1681390.0056, y=5436803.2623
+          But label on MPI map is G108?  
+          in our list though G108 is Port Hardy (which is on D'Urville Island...)
+          However MPI list of Port Hardy is G108 too, so the MPI map label is wrong too.
+          Need to fix these coordinates to x=1681390.0056, y=5436803.2623
+ - G105 - Black Rock - OK - this is at the head of an inlet - OK retain
+ - G128 - Cook Strait 1 - too far out: remove
+ - PG017 - Anakoha Bay - OK - at the end of an inlet - OK retain: match to G017 (174.095 -41.004 1692086 5460222)
+ - PG062 - D'Urville - fully outside tiled region - no match: remove
+ - PG086 - Head Nikau - close to shore - OK retain
+ - PG111 - Kenepuru Head - inland: should be the same as G111 (1693614 5441549), and not as recorded (1689756 5448481)
+           Need to fix these coordinates: match to G111
+ - PG128 - Robertson Point - to far out to sea - no match: remove
+ - PG237 - Port Gore 3 - on land - clearly wrong - should be (1700423.1103 5454097.5219)
+           Need to fix these coordinates - match to G237 (1705190 5453050)
+ 
+
+```{r}
+plot(st_geometry(coast.marlselect), reset=FALSE, col="darkgreen",
+     main="Matching out of area sites to nearest polygon")
+plot(st_geometry(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%outofarea_sf$CLUSTER_ID_closest)), col="yellow", add=TRUE)
+plot(st_geometry(outofarea_sf), pch=16, col="red", cex=1, add=TRUE)
+axis(1); axis(2); box()
+```
+
 
 ```{r}
 plot(coast.marlselect$geometry, col="dark green", xlim=xlim.nydia, ylim=ylim.nydia, reset=FALSE)
@@ -334,7 +409,22 @@ fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
 habdat <- read_excel(fname)
 #View(habdat)
 nrow(habdat) # 292786
+habdat <- habdat[habdat$Site_Code%in%habloc$siteID,]
+nrow(habdat) # 101842
 habdat[1:2,]
+```
+
+Check for collection locations which are not matched to a polygon
+
+```{r}
+any(outofarea$siteID %in% habdat$Site_Code) # TRUE
+outofarea[outofarea$siteID %in% habdat$Site_Code,]
+# G062, PG017, PG111, PG128
+
+idx <- habdat$Site_Code%in%c("G062","PG017","PG111","PG128")
+View(habdat[idx,])
+table(habdat$REPORTED_NAME[idx], habdat$Site_Code[idx])
+# Catanella is seen only at PG017 and PG111, never at G062 or PG128
 ```
 
 
