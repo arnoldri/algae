@@ -175,7 +175,33 @@ list.files("data/confidential")
 
 Locations
 
-Note: Onepipi G121 did not have a longitude/latitude (recorded as 0,0): this is corrected in the file "Raw_MSQP_Locations-Corrected.csv"
+Note: 
+
+* Onepipi PG121 did not have a longitude/latitude (recorded as 0,0): this is corrected in the file "Raw_MSQP_Locations-Corrected.csv"
+
+ - PG121 - Onepipi - did not have lon/lat: corrected to same lon/lat as PG092 Onepipi
+ - G062 - D'Urville - fully outside tiled region - no match: OK leave as non-matching
+ - G086 - Head Nikau - close to shore - OK retain: match to closest polygon
+ - G096 - Te Mahia - on land - and a long way in: clearly wrong!  On MPI map Te Mahia should be at x=1681390.0056, y=5436803.2623
+          But label on MPI map is G108?  
+          in our list though G108 is Port Hardy (which is on D'Urville Island...)
+          However MPI list of Port Hardy is G108 too, so the MPI map label is wrong too.
+          Need to fix these coordinates to x=1681390.0056, y=5436803.2623 lon= lat=
+ - G105 - Black Rock - OK - this is at the head of an inlet - OK retain
+ - G128 - Cook Strait 1 - too far out: remove
+ - PG017 - Anakoha Bay - OK - at the end of an inlet - OK retain: match to G017 (174.095 -41.004 1692086 5460222)
+ - PG062 - D'Urville - fully outside tiled region - no match: remove
+ - PG086 - Head Nikau - close to shore - OK retain
+ - PG111 - Kenepuru Head - inland: should be the same as G111 (1693614 5441549), and not as recorded (1689756 5448481)
+           Need to fix these coordinates: match to G111
+ - PG128 - Robertson Point - to far out to sea - no match: remove
+ - PG237 - Port Gore 3 - on land - clearly wrong - should be (1700423.1103 5454097.5219)
+           Need to fix these coordinates - match to G237 (1705190 5453050)
+
+```{r}
+
+```
+
 
 Use all of these
 
@@ -277,6 +303,38 @@ habloc[habloc$lon==0,] # Location PG121 has lon=0, lat=0: Onepipi
 #onepipi
 #x=1714893.2113, y=5444907.4273
 #ra_getxy(onepipi.xy) #1714886 5444930
+
+gg <- ra_lonlat_to_xy(habloc$lon, habloc$lat, marlcrs)
+gg <- ra_xy_to_lonlat(habloc$x, habloc$y, marlcrs)
+
+gg %>% st_drop_geometry
+
+gg <- st_as_sf(habloc[,c("lon","lat")], coords=c("lon","lat"), crs=globalcrs, agr="constant")
+gg1 <- st_transform(gg, crs=marlcrs)
+
+plot(st_geometry(gg)); axis(1); axis(2); box()
+plot(st_geometry(gg1)); axis(1); axis(2); box()
+
+ra_lonlat_to_xy <- function(lon, lat, crs=2193) {
+  globalcrs <- 4326
+  #marlcrs <- 2193
+  gg <- st_as_sf(data.frame(lon=lon,lat=lat), coords=c("lon","lat"), crs=globalcrs, agr="constant")
+  gg <- st_transform(gg, crs=crs)  
+  n <- nrow(gg)
+  gg <- data.frame(lon=lon, lat=lat, t(array(unlist(gg),dim=c(2,n))))
+  names(gg)[3:4] <- c("x","y")
+  return(gg)
+}
+ra_xy_to_lonlat <- function(x, y, crs=2193) {
+  globalcrs <- 4326
+  #marlcrs <- 2193
+  gg <- st_as_sf(data.frame(x=x,y=y), coords=c("x","y"), crs=globalcrs, agr="constant")
+  gg <- st_transform(gg, crs=globalcrs)  
+  n <- nrow(gg)
+  gg <- data.frame(t(array(unlist(gg),dim=c(2,n))), x=x, y=y)
+  names(gg)[3:4] <- c("lon","lat")
+  return(gg)
+}
 ```
 
 ```{r}

@@ -1,7 +1,42 @@
-#' SF functions
+###################################################################
+# SF functions
+
+#' Extract XY coordinates from an object
 #'
 #' @export
 ra_getxy <- function(x) unclass(x$geometry[[1]])
+
+#' Convert global Longitude and Latitude to XY - defaults to NZ(XY)
+#'
+#' @export
+ra_lonlat_to_xy <- function(lon, lat, crs=2193) {
+  globalcrs <- 4326
+  #marlcrs <- 2193
+  gg <- st_as_sf(data.frame(lon=lon,lat=lat), coords=c("lon","lat"), crs=globalcrs, agr="constant")
+  gg <- st_transform(gg, crs=crs)
+  n <- nrow(gg)
+  gg <- data.frame(lon=lon, lat=lat, t(array(unlist(gg),dim=c(2,n))))
+  names(gg)[3:4] <- c("x","y")
+  return(gg)
+}
+
+#' Convert XY to global Longitude and Latitude - defaults to NZ(XY)
+#'
+#' @export
+ra_xy_to_lonlat <- function(x, y, crs=2193) {
+  globalcrs <- 4326
+  #marlcrs <- 2193
+  gg <- st_as_sf(data.frame(x=x,y=y), coords=c("x","y"), crs=globalcrs, agr="constant")
+  gg <- st_transform(gg, crs=globalcrs)
+  n <- nrow(gg)
+  gg <- data.frame(t(array(unlist(gg),dim=c(2,n))), x=x, y=y)
+  names(gg)[3:4] <- c("lon","lat")
+  return(gg)
+}
+
+
+###################################################################
+# Other Utilities
 
 #' Check for uniqueness
 #'
@@ -9,6 +44,7 @@ ra_getxy <- function(x) unclass(x$geometry[[1]])
 #'
 #' @export
 is.unique <- function(x) length(x)==length(unique(x))
+
 
 #' Run the pacman 00LOCK file destroyer
 #'
