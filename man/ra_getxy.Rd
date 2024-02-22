@@ -2,10 +2,10 @@
 % Please edit documentation in R/utils.R
 \name{ra_getxy}
 \alias{ra_getxy}
-\title{SF functions}
+\title{Extract XY coordinates from an object}
 \usage{
 ra_getxy(x)
 }
 \description{
-SF functions
+Extract XY coordinates from an object
 }

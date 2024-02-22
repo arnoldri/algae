@@ -2,6 +2,8 @@
 
 export(is.unique)
 export(ra_getxy)
+export(ra_lonlat_to_xy)
+export(ra_xy_to_lonlat)
 export(rcpp_hello_world)
 export(rcpp_make_mumat)
 export(timesTwo)

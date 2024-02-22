@@ -175,33 +175,26 @@ list.files("data/confidential")
 
 Locations
 
-Note: 
-
-* Onepipi PG121 did not have a longitude/latitude (recorded as 0,0): this is corrected in the file "Raw_MSQP_Locations-Corrected.csv"
+Note: corrected locations as follows in the file "Raw_MSQP_Locations-Corrected.csv"
 
  - PG121 - Onepipi - did not have lon/lat: corrected to same lon/lat as PG092 Onepipi
- - G062 - D'Urville - fully outside tiled region - no match: OK leave as non-matching
+ - G062 - D'Urville - fully outside tiled region - no match: OK leave as non-matching - no change to coordinates
  - G086 - Head Nikau - close to shore - OK retain: match to closest polygon
  - G096 - Te Mahia - on land - and a long way in: clearly wrong!  On MPI map Te Mahia should be at x=1681390.0056, y=5436803.2623
           But label on MPI map is G108?  
           in our list though G108 is Port Hardy (which is on D'Urville Island...)
           However MPI list of Port Hardy is G108 too, so the MPI map label is wrong too.
-          Need to fix these coordinates to x=1681390.0056, y=5436803.2623 lon= lat=
- - G105 - Black Rock - OK - this is at the head of an inlet - OK retain
+          Need to fix these coordinates to x=1681390.0056, y=5436803.2623 lon=173.9709, lat=-41.21606
+ - G105 - Black Rock - OK - this is at the head of an inlet - OK retain: match to closest polygon
  - G128 - Cook Strait 1 - too far out: remove
  - PG017 - Anakoha Bay - OK - at the end of an inlet - OK retain: match to G017 (174.095 -41.004 1692086 5460222)
  - PG062 - D'Urville - fully outside tiled region - no match: remove
- - PG086 - Head Nikau - close to shore - OK retain
+ - PG086 - Head Nikau - close to shore - OK retain: match to closest polygon
  - PG111 - Kenepuru Head - inland: should be the same as G111 (1693614 5441549), and not as recorded (1689756 5448481)
-           Need to fix these coordinates: match to G111
+           Need to fix these coordinates: match to G111 Kenepuru Head
  - PG128 - Robertson Point - to far out to sea - no match: remove
  - PG237 - Port Gore 3 - on land - clearly wrong - should be (1700423.1103 5454097.5219)
            Need to fix these coordinates - match to G237 (1705190 5453050)
-
-```{r}
-
-```
-
 
 Use all of these
 
@@ -303,38 +296,6 @@ habloc[habloc$lon==0,] # Location PG121 has lon=0, lat=0: Onepipi
 #onepipi
 #x=1714893.2113, y=5444907.4273
 #ra_getxy(onepipi.xy) #1714886 5444930
-
-gg <- ra_lonlat_to_xy(habloc$lon, habloc$lat, marlcrs)
-gg <- ra_xy_to_lonlat(habloc$x, habloc$y, marlcrs)
-
-gg %>% st_drop_geometry
-
-gg <- st_as_sf(habloc[,c("lon","lat")], coords=c("lon","lat"), crs=globalcrs, agr="constant")
-gg1 <- st_transform(gg, crs=marlcrs)
-
-plot(st_geometry(gg)); axis(1); axis(2); box()
-plot(st_geometry(gg1)); axis(1); axis(2); box()
-
-ra_lonlat_to_xy <- function(lon, lat, crs=2193) {
-  globalcrs <- 4326
-  #marlcrs <- 2193
-  gg <- st_as_sf(data.frame(lon=lon,lat=lat), coords=c("lon","lat"), crs=globalcrs, agr="constant")
-  gg <- st_transform(gg, crs=crs)  
-  n <- nrow(gg)
-  gg <- data.frame(lon=lon, lat=lat, t(array(unlist(gg),dim=c(2,n))))
-  names(gg)[3:4] <- c("x","y")
-  return(gg)
-}
-ra_xy_to_lonlat <- function(x, y, crs=2193) {
-  globalcrs <- 4326
-  #marlcrs <- 2193
-  gg <- st_as_sf(data.frame(x=x,y=y), coords=c("x","y"), crs=globalcrs, agr="constant")
-  gg <- st_transform(gg, crs=globalcrs)  
-  n <- nrow(gg)
-  gg <- data.frame(t(array(unlist(gg),dim=c(2,n))), x=x, y=y)
-  names(gg)[3:4] <- c("lon","lat")
-  return(gg)
-}
 ```
 
 ```{r}
@@ -379,8 +340,6 @@ title("Collection points in Malborough\nnot matched to an ocean polygon")
 idx <- sapply(st_within(habloc_sf, bbox.marlselect.polygon),length)==1
 #View(habloc_sf %>% filter(is.na(CLUSTER_ID) & idx)) #%>% as.data.frame()
 outofarea_sf <- habloc_sf %>% filter(is.na(CLUSTER_ID) & idx) 
-outofarea_sf
-## 11 sites, 2 are repeats
 
 # Find the closest polygon
 closest <- list()
@@ -389,21 +348,32 @@ for(i in seq_len(nrow(outofarea_sf))){
 }
 outofarea_sf$CLUSTER_ID_closest <- sapply(closest, function(x) x$CLUSTER_ID)
 outofarea <- outofarea_sf %>% st_drop_geometry()
+
+outofarea_sf
+## 7 sites, 2 are repeats
 ```
 
-     X siteID       site_name SITETYPE     lon     lat CLUSTER_ID
-1   76   G062        Durville    ESTAR 173.709 -40.921         NA
-2  100   G086      Head Nikau    ESTAR 173.896 -41.170         NA
-3  110   G096        Te Mahia    ESTAR 173.576 -41.126         NA
-4  119   G105      Black Rock    ESTAR 174.047 -41.114         NA
-5  142   G128   Cook Strait 1    ESTAR 174.297 -41.395         NA
-6   13  PG017     Anakoha Bay    PHYTO 174.107 -41.054         NA
-7   43  PG062        Durville    PHYTO 173.709 -40.921         NA
-8   53  PG086      Head Nikau    PHYTO 173.896 -41.170         NA
-9   65  PG111   KENEPURU HEAD    PHYTO 174.069 -41.110         NA
-10  76  PG128 Robertson Point    PHYTO 174.297 -41.395         NA
-11  91  PG237     Port Gore 3    PHYTO 174.252 -41.067         NA
-
+Simple feature collection with 7 features and 17 fields
+Geometry type: POINT
+Dimension:     XY
+Bounding box:  xmin: 1659699 ymin: 5416581 xmax: 1708427 ymax: 5469771
+Projected CRS: NZGD2000 / New Zealand Transverse Mercator 2000
+  siteID   X       site_name SITETYPE     lon     lat       x       y notes CLUSTER_ID  lon.mpi  lat.mpi F__OBJECTID  id
+1   G062  76        Durville    ESTAR 173.709 -40.921 1659699 5469771               NA       NA       NA          NA  NA
+2   G086 100      Head Nikau    ESTAR 173.896 -41.170 1675161 5441984               NA 173.8956 -41.1701         165  76
+3   G105 119      Black Rock    ESTAR 174.047 -41.114 1687903 5448060               NA       NA       NA          NA  NA
+4   G128 142   Cook Strait 1    ESTAR 174.297 -41.395 1708427 5416581               NA 174.2967 -41.3953         636 856
+5  PG062  43        Durville    PHYTO 173.709 -40.921 1659699 5469771               NA       NA       NA          NA  NA
+6  PG086  53      Head Nikau    PHYTO 173.896 -41.170 1675161 5441984               NA       NA       NA          NA  NA
+7  PG128  76 Robertson Point    PHYTO 174.297 -41.395 1708427 5416581               NA       NA       NA          NA  NA
+  sample_type          name                geometry CLUSTER_ID_closest
+1        <NA>          <NA> POINT (1659699 5469771)                227
+2          PP    Head Nikau POINT (1675161 5441984)                403
+3        <NA>          <NA> POINT (1687903 5448060)                 46
+4          SF Cook Strait 1 POINT (1708427 5416581)                334
+5        <NA>          <NA> POINT (1659699 5469771)                227
+6        <NA>          <NA> POINT (1675161 5441984)                403
+7        <NA>          <NA> POINT (1708427 5416581)                334
 
 ```{r}
 for(i in seq_len(nrow(outofarea_sf))) {
@@ -424,53 +394,97 @@ for(i in seq_len(nrow(outofarea_sf))) {
 
  - G062 - D'Urville - fully outside tiled region - no match: remove
  - G086 - Head Nikau - close to shore - OK retain
- - G096 - Te Mahia - on land - and a long way in: clearly wrong!  On MPI map Te Mahia should be at x=1681390.0056, y=5436803.2623
-          But label on MPI map is G108?  
-          in our list though G108 is Port Hardy (which is on D'Urville Island...)
-          However MPI list of Port Hardy is G108 too, so the MPI map label is wrong too.
-          Need to fix these coordinates to x=1681390.0056, y=5436803.2623
  - G105 - Black Rock - OK - this is at the head of an inlet - OK retain
  - G128 - Cook Strait 1 - too far out: remove
- - PG017 - Anakoha Bay - OK - at the end of an inlet - OK retain: match to G017 (174.095 -41.004 1692086 5460222)
  - PG062 - D'Urville - fully outside tiled region - no match: remove
  - PG086 - Head Nikau - close to shore - OK retain
- - PG111 - Kenepuru Head - inland: should be the same as G111 (1693614 5441549), and not as recorded (1689756 5448481)
-           Need to fix these coordinates: match to G111
  - PG128 - Robertson Point - to far out to sea - no match: remove
- - PG237 - Port Gore 3 - on land - clearly wrong - should be (1700423.1103 5454097.5219)
-           Need to fix these coordinates - match to G237 (1705190 5453050)
- 
+
+```{r}
+outofarea_retain_sf <- outofarea_sf %>% filter(siteID%in%c("G086","G105","PG086"))
+outofarea_retain_sf
+```
+
 
 ```{r}
 plot(st_geometry(coast.marlselect), reset=FALSE, col="darkgreen",
      main="Matching out of area sites to nearest polygon")
-plot(st_geometry(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%outofarea_sf$CLUSTER_ID_closest)), col="yellow", add=TRUE)
-plot(st_geometry(outofarea_sf), pch=16, col="red", cex=1, add=TRUE)
+plot(st_geometry(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%outofarea_retain_sf$CLUSTER_ID_closest)), col="yellow", add=TRUE)
+plot(st_geometry(outofarea_retain_sf), pch=16, col="red", cex=1, add=TRUE)
 axis(1); axis(2); box()
 ```
 
-
 ```{r}
-plot(coast.marlselect$geometry, col="dark green", xlim=xlim.nydia, ylim=ylim.nydia, reset=FALSE)
-rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
-plot(st_geometry(marlpoly_sf),col="yellow",add=TRUE)
-plot(st_geometry(habloc_sf %>% filter(is.na(CLUSTER_ID))), pch=16, col="red", add=TRUE)
-#points(habloc$x, habloc$y, pch=16, col="red")
-title("Collection points near Nydia Bay\nnot matched to an ocean polygon")
+habloc_sf <- merge(habloc_sf, st_drop_geometry(outofarea_retain_sf)[,c("siteID","CLUSTER_ID_closest")], all.x=TRUE)
+idx <- is.na(habloc_sf$CLUSTER_ID) & !is.na(habloc_sf$CLUSTER_ID_closest)
+habloc_sf$CLUSTER_ID[idx] <- habloc_sf$CLUSTER_ID_closest[idx]
+habloc_sf$CLUSTER_ID_closest <- NULL
+habloc <- habloc_sf %>% st_drop_geometry()
+#write.csv(habloc, file="data/habloc.csv", row.names=FALSE)
 ```
 
+```{r}
+habloc <- read.csv("data/habloc.csv")
+habloc_sf <- st_as_sf(habloc %>% mutate(xp=x,yp=y), 
+                      coords=c("xp","yp"),
+                      crs=marlcrs,
+                      agr="constant")
+```
 
 Detections
 
 ```{r, error=FALSE, message=FALSE, warning=FALSE}
 fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
-habdat <- read_excel(fname)
+habdat <- read_excel(fname) %>% as.data.frame()
 #View(habdat)
 nrow(habdat) # 292786
 habdat <- habdat[habdat$Site_Code%in%habloc$siteID,]
 nrow(habdat) # 101842
 habdat[1:2,]
 ```
+
+Assign each event to a polygon
+
+```{r}
+habdat <- merge(habdat, habloc[,c("siteID","CLUSTER_ID","x","y")], by.x="Site_Code", by.y="siteID", all.x=TRUE)
+nrow(habdat) # 101842
+habdat <- habdat[!is.na(habdat$CLUSTER_ID),]
+nrow(habdat) # 88479
+table(habdat$REPORTED_NAME)
+alexnames <- c("Alexandrium spp.",
+               "Alexandrium cf. pacificum","Alexandrium pacificum",
+               "Alexandrium cf. catenella","Alexandrium catenella")
+habdat.alex <- habdat[habdat$REPORTED_NAME%in%alexnames,]
+nrow(habdat.alex) # 887
+table(habdat.alex$REPORTED_NAME)
+```
+
+    Alexandrium catenella Alexandrium cf. catenella Alexandrium cf. pacificum     Alexandrium pacificum          Alexandrium spp. 
+                      260                         9                        32                       576                        10 
+
+```{r}
+events <- habdat %>% group_by(Site_Code,SITE_DESCRIPTION,SAMPLED_DATE) %>% summarise(ndetections=n()) %>% ungroup()
+nrow(events) # 12824
+table(events$ndetections)
+events[1:10,]
+```
+
+```{r}
+events.alex <- merge(events, 
+                     habdat.alex[,c("Site_Code","SITE_DESCRIPTION","SAMPLED_DATE","Data_Value","UNITS","x","y","CLUSTER_ID")],
+                     by=c("Site_Code","SITE_DESCRIPTION","SAMPLED_DATE"),
+                     all.x=TRUE)
+nrow(events.alex) # 12830: more than 12824
+```
+
+```{r}
+tt <- table(paste(habdat.alex$Site_Code,habdat.alex$SAMPLED_DATE))
+tt[tt>1]
+```
+ G010 2019-02-26 14:00:00  G073 2019-02-26 15:30:00 PG091 2014-02-26 13:53:00 
+                        2                         2                         5 
+
+
 
 Check for collection locations which are not matched to a polygon
 
