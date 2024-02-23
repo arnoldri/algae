@@ -446,7 +446,7 @@ habdat[1:2,]
 Assign each event to a polygon
 
 ```{r}
-habdat <- merge(habdat, habloc[,c("siteID","CLUSTER_ID","x","y")], by.x="Site_Code", by.y="siteID", all.x=TRUE)
+habdat <- merge(habdat, habloc[,c("siteID","site_name","CLUSTER_ID","x","y")], by.x="Site_Code", by.y="siteID", all.x=TRUE)
 nrow(habdat) # 101842
 habdat <- habdat[!is.na(habdat$CLUSTER_ID),]
 nrow(habdat) # 88479
@@ -471,77 +471,210 @@ events[1:10,]
 
 ```{r}
 events.alex <- merge(events, 
-                     habdat.alex[,c("Site_Code","SITE_DESCRIPTION","SAMPLED_DATE","Data_Value","UNITS","x","y","CLUSTER_ID")],
+                     habdat.alex[,c("Site_Code","SITE_DESCRIPTION","SAMPLED_DATE","REPORTED_NAME",
+                                    "Data_Value","UNITS","x","y","site_name","CLUSTER_ID")],
                      by=c("Site_Code","SITE_DESCRIPTION","SAMPLED_DATE"),
                      all.x=TRUE)
 nrow(events.alex) # 12830: more than 12824
 ```
 
+Check that the site names match
+```{r}
+check <- habdat.alex %>% group_by(Site_Code,SITE_DESCRIPTION,site_name) %>% summarise(nrow=n()) %>% ungroup()
+check$SITE_DESCRIPTION <- gsub(".Marine$","",check$SITE_DESCRIPTION)
+all(tolower(check$SITE_DESCRIPTION)==tolower(check$site_name)) # TRUE: same data source
+#nrow(check) # 119
+#View(check) # yes they do match
+```
+
+
 ```{r}
 tt <- table(paste(habdat.alex$Site_Code,habdat.alex$SAMPLED_DATE))
-tt[tt>1]
+nn <- names(tt[tt>1])
+habdat.alex[paste(habdat.alex$Site_Code,habdat.alex$SAMPLED_DATE)%in%nn,]
+events.alex[paste(events.alex$Site_Code,events.alex$SAMPLED_DATE)%in%nn,]
 ```
  G010 2019-02-26 14:00:00  G073 2019-02-26 15:30:00 PG091 2014-02-26 13:53:00 
                         2                         2                         5 
 
+     Site_Code         SITE_DESCRIPTION        SAMPLED_DATE ndetections             REPORTED_NAME   Data_Value      UNITS       x       y
+272        G010       Hallam Cove.Marine 2019-02-26 14:00:00          13 Alexandrium cf. pacificum         2700 CELL_LITRE 1669388 5461359
+273        G010       Hallam Cove.Marine 2019-02-26 14:00:00          13          Alexandrium spp.          400 CELL_LITRE 1669388 5461359
+4927       G073 Head Of Nydia Bay.Marine 2019-02-26 15:30:00           9     Alexandrium pacificum         4000 CELL_LITRE 1665852 5442296
+4928       G073 Head Of Nydia Bay.Marine 2019-02-26 15:30:00           9          Alexandrium spp.          200 CELL_LITRE 1665852 5442296
+12504     PG091                Tio Point 2014-02-26 13:53:00          17     Alexandrium catenella         1300 CELL_LITRE 1704754 5434402
+12505     PG091                Tio Point 2014-02-26 13:53:00          17     Alexandrium catenella         2100 CELL_LITRE 1704754 5434402
+12506     PG091                Tio Point 2014-02-26 13:53:00          17     Alexandrium catenella         1400 CELL_LITRE 1704754 5434402
+12507     PG091                Tio Point 2014-02-26 13:53:00          17     Alexandrium catenella          300 CELL_LITRE 1704754 5434402
+12508     PG091                Tio Point 2014-02-26 13:53:00          17     Alexandrium catenella Not Detected CELL_LITRE 1704754 5434402
 
-
-Check for collection locations which are not matched to a polygon
+2014 detections will be ignorable (use data from 2018 only)
+G010 and G073 remove Alexandrium spp. cases.
+Achieve this by taking the events with the maximum Data_Value
 
 ```{r}
-any(outofarea$siteID %in% habdat$Site_Code) # TRUE
-outofarea[outofarea$siteID %in% habdat$Site_Code,]
-# G062, PG017, PG111, PG128
+idx <- paste(events.alex$Site_Code,events.alex$SAMPLED_DATE)%in%nn
+events.alex[idx,]
+d1 <- events.alex[idx,]
+d0 <- events.alex[!idx,]
 
-idx <- habdat$Site_Code%in%c("G062","PG017","PG111","PG128")
-View(habdat[idx,])
-table(habdat$REPORTED_NAME[idx], habdat$Site_Code[idx])
-# Catanella is seen only at PG017 and PG111, never at G062 or PG128
+d1 <- d1 %>% 
+  group_by(Site_Code) %>%
+  filter(Data_Value==max(as.numeric(Data_Value),na.rm=TRUE)) %>%
+  ungroup() 
+d1
+
+events.alex <- rbind(d0,d1)
+nrow(events.alex) # 12824 - OK
+table(events.alex$Data_Value)
+events.alex$Value <- as.numeric(events.alex$Data_Value)
+events.alex$Value[is.na(events.alex$Value)] <- 0
+events.alex$site_name <- NULL; events.alex$x <- NULL; events.alex$y <- NULL; events.alex$CLUSTER_ID <- NULL
+events.alex$SITE_DESCRIPTION <- NULL
+events.alex$UNITS <- NULL
+events.alex <- merge(events.alex, habloc_sf[,c("siteID","site_name","x","y","CLUSTER_ID")] %>% st_drop_geometry(), 
+                     by.x="Site_Code", by.y="siteID", all.x=TRUE)
+#table(events.alex$ndetections,exclude=NULL)
+events.alex$REPORTED_NAME[is.na(events.alex$REPORTED_NAME)] <- "No detection"
+table(events.alex$REPORTED_NAME,exclude=NULL)
+events.alex$Date <- as.Date(substring(events.alex$SAMPLED_DATE,1,10), format="%Y-%m-%d")
+events.alex$DateTime <- as.POSIXct(events.alex$SAMPLED_DATE)
+
+# Convert dates to weeks: move the date back to the previous Monday
+events.alex$mDate <- make.monday(events.alex$Date)
+events.alex$mWeek <- as.integer(events.alex$mDate+3)%/%7
+events.alex$mDay <- as.numeric(format(events.alex$Date,"%u"))
+
+#data.frame(format(events.alex$Date,"%Y-%m-%d, %a"), 
+#          format(events.alex$mDate,"%Y-%m-%d, %a"),
+#           events.alex$mWeek,
+#           events.alex$mDay)[1:10,]
+
+table(format(events.alex$Date, "%a"))
+table(format(events.alex$mDate, "%a"))
+#gsub("-.$","-1",format(events.alex$Date, "%Y-%m-%u")[1:20])
+#gsub("-.$","w1",format(events.alex$Date, "%Y-%m-%u")[1:20])
+```
+
+```{r}
+#write.csv(events.alex %>% st_drop_geometry(),file="data/eventsAlexandrium.csv",row.names=FALSE)
+events.alex <- read.csv("data/eventsAlexandrium.csv")
+events.alex$Date <- as.Date(events.alex$Date)
+events.alex$mDate <- as.Date(events.alex$mDate)
+events.alex$DateTime <- as.POSIXct(events.alex$SAMPLED_DATE)
+nrow(events.alex)
+View(events.alex)
+```
+
+Check for multiple events in the same week
+```{r}
+tt <- table(paste(events.alex$Site_Code,events.alex$mWeek))
+table(tt[tt>1])
+```
+
+This happens a lot!
+
+  2   5   6 
+215   2   3 
+
+Make a unique version - just take the first sample in each week
+```{r}
+events.alex.week1 <- events.alex %>%
+                      group_by(Site_Code,mWeek) %>%
+                      filter(mDay==min(mDay)) %>%
+                      ungroup()
+#View(events.alex.week1)
+is.unique(paste(events.alex$Site_Code, events.alex$mWeek)) # FALSE
+is.unique(paste(events.alex.week1$Site_Code, events.alex.week1$mWeek)) # FALSE
+
+tt <- table(paste(events.alex.week1$Site_Code,events.alex.week1$mWeek))
+table(tt[tt>1])
+```
+
+A few cases of multiple samples on a single day
+
+ 2  5  6 
+10  2  3 
+
+```{r}
+nn <- names(tt[tt>1])
+events.alex.week1[paste(events.alex.week1$Site_Code,events.alex.week1$mWeek) %in% nn,]
+```
+
+```{r}
+events.alex.week <- events.alex %>%
+                      group_by(Site_Code,mWeek) %>%
+                      filter(DateTime==min(DateTime)) %>%
+                      ungroup()
+#View(events.alex.week)
+is.unique(paste(events.alex$Site_Code, events.alex$mWeek)) # FALSE
+is.unique(paste(events.alex.week$Site_Code, events.alex.week$mWeek)) # TRUE
+nrow(events.alex.week) # 12586
+```
+
+```{r}
+#write.csv(events.alex.week %>% st_drop_geometry(),file="data/eventsAlexandriumWeek.csv",row.names=FALSE)
+events.alex.week <- read.csv("data/eventsAlexandriumWeek.csv")
+events.alex.week$Date <- as.Date(events.alex.week$Date)
+events.alex.week$mDate <- as.Date(events.alex.week$mDate)
+events.alex.week$DateTime <- as.POSIXct(events.alex.week$SAMPLED_DATE)
+nrow(events.alex.week)
+#View(events.alex.week)
+```
+
+```{r}
+hist(events.alex$Date, breaks="years")
+```
+
+```{r}
+diff(range(events.alex.week$mWeek)) # 573 weeks
+range(events.alex.week$Date)  #"2012-04-30" "2023-04-26"
+nrow(events.alex.week) # 12586
+nrow(events.alex.week[events.alex.week$Date>=as.Date("2018-01-01"),]) # 6411
+```
+
+```{r}
+plot(events.alex.week$Date, events.alex.week$Value, 
+     xlab="Date", ylab="Cells/litre",
+     main="Detections of Alexandrium")
+```
+
+```{r}
+maxobs <- events.alex.week %>% 
+  filter(Date>=as.Date("2018-01-01")) %>%
+  group_by(CLUSTER_ID) %>% 
+  summarise(Value1000=max(Value)/1000) %>%
+  ungroup()
+maxobs_sf <- merge(marlpoly_sf.trim, maxobs, all.x=TRUE)
 ```
 
 
-
 ```{r}
-table(habdat$REPORTED_NAME)
-alexdat <- habdat[grepl("Alexandrium", habdat$REPORTED_NAME),]
-table(alexdat$Site_Code)
-
-table(alexdat$Site_Code[grepl("acific",alexdat$REPORTED_NAME)])
-```
-
-
-
-
-```{r}
-idx <- habloc$lon!=0
-plot(habloc$lon[idx], habloc$lat[idx])
-```
-
-
-```{r}
-is.unique(habloc$siteID) # TRUE
-is.unique(habdat$Site_Code) # FALSE
-all(habdat$Site_Code %in% habloc$siteID) # FALSE
-sum(habdat$Site_Code %in% habloc$siteID)    # 101842
-sum(!(habdat$Site_Code %in% habloc$siteID)) # 190944
-nrow(habdat) # 292786
-sum(habdat$Site_Code %in% habloc$siteID)+sum(!(habdat$Site_Code %in% habloc$siteID)) # 292786
-
-table(habdat$Site_Code[(habdat$Site_Code %in% habloc$siteID)]) # G and PG sites only
-length(table(habdat$Site_Code[(habdat$Site_Code %in% habloc$siteID)])) # 156 sites
-
-table(habdat$Site_Code[!(habdat$Site_Code %in% habloc$siteID)]) # some G and PG sites (G02, G06, G09, PG254, PG271, PG272)
-# looks like G02, G06, G09 may be mislabelled?  should be G002, G006, G009? - esp relevant since G009 is Nydia Bay?
-
-table(habloc$siteID[!(habloc$siteID %in% habdat$Site_Code)])
+plot(maxobs_sf["Value1000"], key.pos=4, reset=FALSE, 
+     main="Maximum Alexandrium detections")
+mtext("1-Jan-2018 to 26-Apr-2023", side=1, line=-0.5, cex=0.5, adj=1)#, xlim=xlim.havelock, ylim=ylim.havelock)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
 ```
 
 ```{r}
-#library(rjson)
-#list.files("../../data/confidential/MSQP_dataset/")
-#fname <- "../../data/confidential/MSQP_dataset/Raw_MSQP.json"
-#file.exists(fname)
-#jdat <- fromJSON(file=fname, simplify=TRUE)
-#fromJSON("../../../data/confidential")
+wmin <- min(events.alex.week$mWeek[events.alex.week$Date>=as.Date("2018-01-01")])
+wmax <- max(events.alex.week$mWeek)
+c(wmin,wmax) # 2505-2782 (278 weeks)
 ```
+
+```{r}
+for(w in wmin+(0:10)) {
+  plot(merge(marlpoly_sf.trim, 
+             events.alex.week[events.alex.week$mWeek==w,c("CLUSTER_ID","Value")] %>% mutate(Value1000=Value/1000)) %>% 
+         st_geometry(), 
+       breaks=c(25*(0:7)), 
+       key.pos=4,
+       main=paste0("Week ",w), 
+       reset=FALSE)
+  plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+  plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+}
+```
+
 

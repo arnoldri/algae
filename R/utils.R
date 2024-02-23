@@ -38,6 +38,14 @@ ra_xy_to_lonlat <- function(x, y, crs=2193) {
 ###################################################################
 # Other Utilities
 
+#' Make dates dd into the date of the preceding Monday
+#'
+#' @export
+make.monday <- function(dates) {
+  as.Date(-3+7*(as.integer(dates+3)%/%7), origin="1970-01-01")
+}
+
+
 #' Check for uniqueness
 #'
 #' @description Check for uniqueness
