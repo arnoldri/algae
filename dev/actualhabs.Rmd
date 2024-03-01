@@ -665,16 +665,31 @@ c(wmin,wmax) # 2505-2782 (278 weeks)
 ```
 
 ```{r}
+xrange <- range(marlpoly_sf.trim$volume)
+breaks <- seq(from=xrange[1], to=xrange[2], length=9)
+plot(marlpoly_sf.trim["volume"],
+     key.pos=4, reset=FALSE,
+     breaks=breaks)
+```
+
+
+```{r warning=FALSE, message=FALSE}
+par(opar); par(mar=1.1*c(1,1,4.1,1))
+xrange <- range(events.alex.week$Value)/1000
+breaks <- seq(from=xrange[1], to=xrange[2], length=9)
 for(w in wmin+(0:10)) {
   thisweek.poly <- merge(marlpoly_sf.trim, 
              events.alex.week[events.alex.week$mWeek==w,c("CLUSTER_ID","Value")] %>% mutate(Value1000=Value/1000)) 
-  plot(thisweek.poly %>% st_geometry(), 
+  plot(st_geometry(coast.marlselect), col="darkgreen", reset=FALSE, xlim=xlim.marlselect, ylim=ylim.marlselect)
+  title(main=paste0("Week ",w))
+  plot(thisweek.poly["Value1000"], 
        key.pos=4,
-       main=paste0("Week ",w), 
-       reset=FALSE)
-  plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
-  plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+       breaks=breaks,
+       add=TRUE)
+  box()
+  #plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
 }
+par(opar)
 ```
 
 
