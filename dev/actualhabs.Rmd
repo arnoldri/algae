@@ -456,7 +456,7 @@ alexnames <- c("Alexandrium spp.",
                "Alexandrium cf. catenella","Alexandrium catenella")
 habdat.alex <- habdat[habdat$REPORTED_NAME%in%alexnames,]
 nrow(habdat.alex) # 887
-table(habdat.alex$REPORTED_NAME)
+#table(habdat.alex$REPORTED_NAME)
 ```
 
     Alexandrium catenella Alexandrium cf. catenella Alexandrium cf. pacificum     Alexandrium pacificum          Alexandrium spp. 
@@ -639,6 +639,7 @@ plot(events.alex.week$Date, events.alex.week$Value,
      main="Detections of Alexandrium")
 ```
 
+Find the largest intensity observation in each polygon over the entire period
 ```{r}
 maxobs <- events.alex.week %>% 
   filter(Date>=as.Date("2018-01-01")) %>%
@@ -662,6 +663,21 @@ wmin <- min(events.alex.week$mWeek[events.alex.week$Date>=as.Date("2018-01-01")]
 wmax <- max(events.alex.week$mWeek)
 c(wmin,wmax) # 2505-2782 (278 weeks)
 ```
+
+```{r}
+for(w in wmin+(0:10)) {
+  thisweek.poly <- merge(marlpoly_sf.trim, 
+             events.alex.week[events.alex.week$mWeek==w,c("CLUSTER_ID","Value")] %>% mutate(Value1000=Value/1000)) 
+  plot(thisweek.poly %>% st_geometry(), 
+       key.pos=4,
+       main=paste0("Week ",w), 
+       reset=FALSE)
+  plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+  plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+}
+```
+
+
 
 ```{r}
 for(w in wmin+(0:10)) {
