@@ -45,6 +45,20 @@ make.monday <- function(dates) {
   as.Date(-3+7*(as.integer(dates+3)%/%7), origin="1970-01-01")
 }
 
+#' Make a date in to a week number
+#'
+#' @export
+date.as.week <- function(dates) {
+  as.integer(dates+3)%/%7
+}
+
+#' Week number as a date
+#'
+#' @export
+week.as.date <- function(weeks) {
+  as.Date(weeks*7-3)
+}
+
 
 #' Check for uniqueness
 #'
