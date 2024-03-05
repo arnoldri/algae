@@ -503,12 +503,16 @@ d1 <- d1 %>%
   filter(Data_Value==max(as.numeric(Data_Value),na.rm=TRUE)) %>%
   ungroup() 
 d1
-
 events.alex <- rbind(d0,d1)
 nrow(events.alex) # 12824 - OK
-table(events.alex$Data_Value)
+```
+
+Data transformation - form weeks (starting on Mondays)
+
+```{r}
+#table(events.alex$Data_Value)
 events.alex$Value <- as.numeric(events.alex$Data_Value)
-events.alex$Value[is.na(events.alex$Value)] <- 0
+events.alex$Value[is.na(events.alex$Value)] <- 0 # "Not Detected" then becomes 0
 events.alex$site_name <- NULL; events.alex$x <- NULL; events.alex$y <- NULL; events.alex$CLUSTER_ID <- NULL
 events.alex$SITE_DESCRIPTION <- NULL
 events.alex$UNITS <- NULL
@@ -525,11 +529,6 @@ events.alex$mDate <- make.monday(events.alex$Date)
 events.alex$mWeek <- date.as.week(events.alex$mDate) ### as.integer(events.alex$mDate+3)%/%7
 events.alex$mDay <- as.numeric(format(events.alex$Date,"%u"))
 
-#data.frame(format(events.alex$Date,"%Y-%m-%d, %a"), 
-#          format(events.alex$mDate,"%Y-%m-%d, %a"),
-#           events.alex$mWeek,
-#           events.alex$mDay)[1:10,]
-
 table(format(events.alex$Date, "%a"))
 table(format(events.alex$mDate, "%a"))
 #gsub("-.$","-1",format(events.alex$Date, "%Y-%m-%u")[1:20])
@@ -543,7 +542,7 @@ events.alex$Date <- as.Date(events.alex$Date)
 events.alex$mDate <- as.Date(events.alex$mDate)
 events.alex$DateTime <- as.POSIXct(events.alex$SAMPLED_DATE)
 nrow(events.alex)
-View(events.alex)
+#View(events.alex)
 ```
 
 Check for multiple events in the same week
@@ -861,7 +860,70 @@ Correctly identifies the columns as source polygons, rows as destinations
 
 The trouble is that particles have only been released in 40 of the polygons: not all 408
 
-```{r}
+```{r}```{r warning=FALSE, message=FALSE}
+par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
+logscale <- TRUE
+#logscale <- FALSE
+if(logscale) {
+  xrange <- log(1+range(events.alex.week.2018$Value)/1000)
+} else {
+  xrange <- range(events.alex.week.2018$Value)/1000
+}
+nbreaks <- 9
+breaks <- seq(from=xrange[1], to=xrange[2], length=nbreaks)
+colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
+outdir <- c("ignore/fig1/")
+fstem <- "poly1"
+ofile <- paste0("ignore/",fstem,".gif")
+interactive <- FALSE
+#interactive <- TRUE
+wrange <- wmin:wmax 
+#wrange <- wmin+0:10
+xlim <- xlim.marlselect; ylim <- ylim.marlselect
+xlim <- xlim.nydia; ylim <- ylim.nydia
+#date.axis <- FALSE
+date.axis <- TRUE
+i <- 0
+for(w in wrange) { 
+  thisweek.poly <- merge(marlpoly_sf.trim, 
+             events.alex.week.2018[events.alex.week.2018$mWeek==w,c("CLUSTER_ID","Value")] %>% 
+               mutate(Value1000=Value/1000)) 
+  if(logscale) thisweek.poly$Value1000 <- log(1+thisweek.poly$Value1000)
+  i <- i+1
+  fname <- sprintf("%s/%s%04d.png", outdir, fstem, i)
+  if(!interactive) png(file=fname, width=480, height=480)
+  par(oma=c(3.1,0.5,0,0))
+  par(mar=1.1*c(2.5,1,4.1,4.1))
+  plot(thisweek.poly["Value1000"], 
+       pal=colvec,
+       key.pos=4,
+       breaks=breaks,
+       reset=FALSE, 
+       xlim=xlim, ylim=ylim, main="", axes=FALSE)
+  plot(st_geometry(coast.marlselect), col="light green", add=TRUE)
+  title(main=paste0("Week ",w))
+  box()
+  mtext(format(week.as.date(w), "%d-%m-%Y"), 
+        side=3, line=0, adj=1, cex=0.8)
+  mtext(ifelse(logscale,"Log scale","Linear scale"), 
+        side=3, line=0, adj=0, cex=0.8)
+  if(date.axis) {
+    par(usr=c(as.numeric(week.as.date(wrange[c(1,length(wrange))])),0,1))
+    axis.Date(1)
+    points(week.as.date(w),0,pch=16,cex=2,xpd=TRUE)
+  }
+  if(!interactive) dev.off()
+  #plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+}
+par(opar)
+if(!interactive) {
+  image_list <- lapply(list.files(outdir,full.names=TRUE), image_read)
+  poly_animated <- image_animate(image_join(image_list), fps=20)
+  image_write(poly_animated, ofile)
+  unlink(list.files(outdir,full.names=TRUE))
+}
+```
+
 dim(migr[[1]])
 
 range(apply(conn[[1]],1,sum,na.rm=TRUE)) # row sums 0 1.802315
