@@ -112,7 +112,7 @@ Find number of detections and max observation value per polygon
 ```{r}
 polydat <- event %>%
   group_by(CLUSTER_ID) %>%
-  summarise(lon=first(lon),lat=first(lat),x=first(x),y=first(y),nobs=n(),maxValue=max(Value))
+  summarise(lon=first(lon),lat=first(lat),x=first(x),y=first(y),nobs=n(),maxValue=max(Value)) %>%
   ungroup()
 #View(polydat)
 
@@ -377,6 +377,13 @@ box()
 
 ```{r}
 print(poly_animated)
+```
+
+Which polygons are in the Nydia area?
+```{r}
+idx <- ((marlpoly_sf.trim$x>xlim.nydia[1] & marlpoly_sf.trim$x<xlim.nydia[2]) & 
+        (marlpoly_sf.trim$y>ylim.nydia[1] & marlpoly_sf.trim$y<ylim.nydia[2]) ) 
+marlpoly_sf.trim[idx,]
 ```
 
 
