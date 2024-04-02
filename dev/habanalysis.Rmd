@@ -1,0 +1,383 @@
+---
+title: "habanalysis"
+output: html_document
+date: "2024-04-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Packages + set up
+load("opar.Rda")
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(maps)
+library(sf)
+library(geojsonsf)
+library(rmapshaper)
+library(magick)
+
+library(algae)
+source("funcs.R")
+source("maps.R")
+```
+
+Subsets of Tasman/Marlborough
+
+```{r}
+bbox.tasmar <- c(1570,5370,1725,5520)*1000
+xlim.tasmar <- bbox.tasmar[c(1,3)]
+ylim.tasmar <- bbox.tasmar[c(2,4)]
+
+bbox.marlselect <- c(1645,5415,1720,5495)*1000
+bbox.marlselect <- c(1645,5412,1725,5502)*1000
+xlim.marlselect <- bbox.marlselect[c(1,3)]
+ylim.marlselect <- bbox.marlselect[c(2,4)]
+xlim.havelock <- c(1660,1675)*1000
+ylim.havelock <- c(5425,5440)*1000
+xlim.nydia <- c(1662,1677)*1000
+ylim.nydia <- c(5437,5450)*1000
+xlim.arapawa <- c(1695,1718)*1000
+ylim.arapawa <- c(5432,5452)*1000
+
+# Coastal polygons for mapping
+bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
+                                                 bbox.marlselect[c(2,2,4,4,2)])))
+coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
+
+bbox.tasmar.polygon <- st_polygon(list(cbind(bbox.tasmar[c(1,3,3,1,1)],
+                                             bbox.tasmar[c(2,2,4,4,2)])))
+coast.tasmar <- st_crop(coast, bbox.tasmar.polygon)
+
+# polygons in model
+habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
+habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
+marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons_volume.geojson")
+marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
+
+marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
+
+globalcrs <- 4326
+marlcrs <- st_crs(marlpoly_sf.trim)
+```
+
+Locations
+
+```{r}
+habloc <- read.csv("data/habloc.csv")
+habloc_sf <- st_as_sf(habloc %>% mutate(xp=x,yp=y), 
+                      coords=c("xp","yp"),
+                      crs=marlcrs,
+                      agr="constant")
+```
+
+Detections from 1 Jan 2018 onwards
+
+```{r}
+event <- read.csv("data/events_alex.csv")
+nrow(event) # 6527
+event$date <- as.Date(event$date)
+event <- event[event$include,]
+nrow(event) # 6327
+
+# subset the events
+locs <- habloc[habloc$CLUSTER_ID%in%event$CLUSTER_ID,]
+locs_sf <- habloc_sf[habloc_sf$CLUSTER_ID%in%event$CLUSTER_ID,]
+```
+
+Need one event per polygon per week - just take the first event for simplicity
+```{r}
+eventpoly <- event %>%
+  group_by(CLUSTER_ID,week) %>%
+  arrange(date) %>%
+  summarise(fevent=first(event)) %>%
+  ungroup()
+nrow(event) # 6372
+nrow(eventpoly) # 6351
+
+event$first <- event$event %in% eventpoly$fevent
+table(event$first) # 21  6351
+table(event$alex,event$first) # lose 15 detections from this
+event <- event[event$first,]
+nrow(event) # 6351
+```
+
+Find number of detections and max observation value per polygon
+```{r}
+polydat <- event %>%
+  group_by(CLUSTER_ID) %>%
+  summarise(lon=first(lon),lat=first(lat),x=first(x),y=first(y),nobs=n(),maxValue=max(Value))
+  ungroup()
+#View(polydat)
+
+polydat_sf <- merge(marlpoly_sf.trim, polydat, all.x=TRUE)
+polydat_sf$nobs[is.na(polydat_sf$nobs)] <- 0
+```
+
+
+```{r message=FALSE, warning=FALSE}
+plot((polydat_sf %>% filter(nobs>0))["maxValue"], key.pos=4, reset=FALSE, 
+     main="Maximum Alexandrium detections")
+mtext("1-Jan-2018 to 26-Apr-2023", side=1, line=-0.5, cex=0.5, adj=1)#, xlim=xlim.havelock, ylim=ylim.havelock)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+plot((polydat_sf %>% filter(nobs>0,maxValue==0))["maxValue"], col="white", add=TRUE)
+plot(st_centroid(polydat_sf %>% filter(nobs>0,maxValue==0)), pch="+", col="red", add=TRUE)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+plot((polydat_sf %>% filter(nobs>0))["maxValue"], key.pos=4, reset=FALSE, 
+     main="Maximum Alexandrium detections - Nydia Bay",
+     xlim=xlim.nydia, ylim=ylim.nydia)
+mtext("1-Jan-2018 to 26-Apr-2023", side=1, line=-0.5, cex=0.5, adj=1)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+plot((polydat_sf %>% filter(nobs>0,maxValue==0))["maxValue"], col="white", add=TRUE)
+plot(st_centroid(polydat_sf %>% filter(nobs>0,maxValue==0)), pch="+", col="red", add=TRUE)
+```
+
+```{r}
+monitored.polygons <- event$CLUSTER_ID
+nmonitored <- length(monitored.polygons)
+plot(NA,NA, xlim=range(event$date), ylim=c(0,nmonitored+1), xlab="Date", ylab="", axes=FALSE)
+axis.Date(1); axis(2, at=1:nmonitored, lab=monitored.polygons, las=2, cex.axis=0.5); box()
+idx <- event$CLUSTER_ID%in%monitored.polygons
+#points(events.alex.week.2018$mDate[idx], match(events.alex.week.2018$CLUSTER_ID[idx],monitored.polygons),
+#       pch=16, cex=2*events.alex.week.2018$Value[idx]/1000/100, col="#00995555")
+points(event$date[idx], match(event$CLUSTER_ID[idx],monitored.polygons),
+       pch=16, cex=0.5*log(event$Value[idx]/1000), col="#00995555")
+title("Detections by polygon over time (log scale)")
+```
+
+```{r warning=FALSE, message=FALSE}
+wmin <- min(event$week)
+wmax <- max(event$week)
+
+par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
+logscale <- TRUE
+#logscale <- FALSE
+if(logscale) {
+  xrange <- log(1+range(event$Value)/1000)
+} else {
+  xrange <- range(event$Value)/1000
+}
+nbreaks <- 9
+breaks <- seq(from=xrange[1], to=xrange[2], length=nbreaks)
+colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
+outdir <- c("ignore/fig1/")
+fstem <- "poly1"
+ofile <- paste0("ignore/",fstem,".gif")
+interactive <- FALSE
+#interactive <- TRUE
+wrange <- wmin:wmax 
+#wrange <- wmin+0:10
+xlim <- xlim.marlselect; ylim <- ylim.marlselect
+xlim <- xlim.nydia; ylim <- ylim.nydia
+#date.axis <- FALSE
+date.axis <- TRUE
+i <- 0
+for(w in wrange) { 
+  thisweek.poly <- merge(marlpoly_sf.trim, 
+             event[event$week==w,c("CLUSTER_ID","Value")] %>% 
+               mutate(Value1000=Value/1000)) 
+  if(logscale) thisweek.poly$Value1000 <- log(1+thisweek.poly$Value1000)
+  i <- i+1
+  fname <- sprintf("%s/%s%04d.png", outdir, fstem, i)
+  if(!interactive) png(file=fname, width=480, height=480)
+  par(oma=c(3.1,0.5,0,0))
+  par(mar=1.1*c(2.5,1,4.1,4.1))
+  plot(thisweek.poly["Value1000"], 
+       pal=colvec,
+       key.pos=4,
+       breaks=breaks,
+       reset=FALSE, 
+       xlim=xlim, ylim=ylim, main="", axes=FALSE)
+  plot(st_geometry(coast.marlselect), col="light green", add=TRUE)
+  title(main=paste0("Week ",w))
+  box()
+  mtext(format(week.as.date(w), "%d-%m-%Y"), 
+        side=3, line=0, adj=1, cex=0.8)
+  mtext(ifelse(logscale,"Log scale","Linear scale"), 
+        side=3, line=0, adj=0, cex=0.8)
+  if(date.axis) {
+    par(usr=c(as.numeric(week.as.date(wrange[c(1,length(wrange))])),0,1))
+    axis.Date(1)
+    points(week.as.date(w),0,pch=16,cex=2,xpd=TRUE)
+  }
+  if(!interactive) dev.off()
+  #plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+}
+par(opar)
+if(!interactive) {
+  image_list <- lapply(list.files(outdir,full.names=TRUE), image_read)
+  poly_animated <- image_animate(image_join(image_list), fps=20)
+  image_write(poly_animated, ofile)
+  unlink(list.files(outdir,full.names=TRUE))
+}
+```
+
+
+# Connectivity and Migration matrices
+
+In the matrices below the rows are the destination locations ($i=1,\dots,n$) 
+and the columns are the source locations ($j=1,\ldots,n$).
+
+Notation: at time step $t\rightarrow t+1$ we release Mass $M_{t.j}$ from polygon $j$.  
+Mass $M_{tij}$ arrives in polygon $i$ from polygon $j$, thus
+\[
+   M_{t.j} = \sum_{i=1}^n M_{tij}
+\]
+The proportion of mass leaving polygon $j$ at time $t$ and arriving at polygon $i$ at time $t+1$ is
+\[
+   P_{tij} = \frac{M_{tij}}{M_{t.j}}
+\]
+with row sums
+\[
+   \sum_{i=1}^n P_{tij} = 1\qquad \text{for all polygons $j$ and times $t$}
+\]
+$P_t = (P_{tij})$ is the **connectivity matrix** at time $t$.
+
+The total mass arriving in polygon $i$ from all sources (including itself) is 
+\[
+   M_{ti.} = \sum_{j=1}^n M_{tij}
+\]
+The proportion of mass arriving in polygon $i$ at time $t+1$ that came from polygon $j$ at time $t$ is
+\[
+   Q_{tij} = \frac{M_{tij}}{M_{ti.}}
+\]
+with column sums
+\[
+   \sum_{i=1}^n Q_{tij} = 1\qquad \text{for all polygons $j$ and times $t$}
+\]
+$Q_t = (Q_{tij})$ is the **migration matrix** at time $t$.
+
+
+**Notes from Romain**
+
+I am sending you 2 matrices with two different ways of computing the connectivity. 
+Each file has one sheet per release day and each sheet shows the connectivity after 7 days of tracking. 
+
+Rows represent the source locations and columns represent the receiving locations (ordered following the sampling stations ID). 
+
+In Connectivity_matrices_04_to_07_2018, you will find the connectivity represented as a percentage of the 
+total released at each sampling station, so each row almost add to 1 (some particles are not within 
+a polygon at the end of the run, and therefore they are not counted).
+
+In Migration_matrices_04_to_07_2018, you will find the connectivity normalized
+per column (sum to 1 per column).  This gives you the percentage of the contribution 
+of each source location to a receiving location.
+
+**RA:** We reverse the rows/columns when reading in: connectivities ($P$) should 
+then have unit column sums, and migrations ($Q$) have unit row sums
+
+Note range=cell_cols(1:408) specifies to read 408 columns - otherwise leading blank columns get dropped
+
+```{r}
+getmatrices <- TRUE
+getmatrices <- FALSE
+if(getmatrices) {
+  # Connection and migration matrices for the polygons
+  fname <- "data/connectivity_matrix.xlsx"
+  nsheets <- length(excel_sheets(fname))
+  conn <- lapply(1:nsheets, function(i) t(as.matrix(read_excel(fname, sheet=i, 
+                                                               col_names=FALSE,
+                                                               range=cell_cols(1:408)))))
+  names(conn) <- excel_sheets(fname)
+
+  #fname <- "data/Migration_matrices_04_to_07_2018.xls"
+  fname <- "data/migration_matrix.xlsx"
+  nsheets <- length(excel_sheets(fname))
+  migr <- lapply(1:nsheets, function(i) t(as.matrix(read_excel(fname, sheet=i, 
+                                                               col_names=FALSE,
+                                                               range=cell_cols(1:408)))))
+  names(migr) <- excel_sheets(fname)
+  matdates <- as.Date(names(migr),format="%Y%m%d")
+}
+#save.image()
+```
+
+```{r}
+sapply(conn,dim)-408
+sapply(migr,dim)-408
+```
+
+Correctly identifies the columns as source polygons, rows as destinations
+
+The trouble is that particles have only been released in 40 of the polygons: not all 408
+
+```{r}
+dim(migr[[1]])
+
+range(apply(conn[[1]],1,sum,na.rm=TRUE)) # row sums 0 1.802315
+range(apply(conn[[1]],2,sum,na.rm=TRUE)) # col sums 0 1
+
+table(apply(conn[[1]],1,sum,na.rm=TRUE)>0) # 320 nonzero,  88 zero
+table(apply(conn[[1]],2,sum,na.rm=TRUE)>0) #  40 nonzero, 368 zero
+#  conn[i,j] has sum_i conn[i,j] = 1 for all j where particles have been released
+#  i.e. conn[i,j] = proportion of mass from j that ends up in polygon i
+#       conn[i,j] = P_{ij}
+
+hist(apply(conn[[1]],1,sum,na.rm=TRUE))
+hist(apply(conn[[1]],2,sum,na.rm=TRUE))
+```
+
+```{r}
+range(apply(migr[[1]],1,sum,na.rm=TRUE)) # row sums 0 1
+range(apply(migr[[1]],2,sum,na.rm=TRUE)) # col sums 0 113.2058
+
+table(apply(migr[[1]],1,sum,na.rm=TRUE)>0) # 320 nonzero,  88 zero
+table(apply(migr[[1]],2,sum,na.rm=TRUE)>0) #  40 nonzero, 368 zero
+# migr[i,j] has sum_j migr[i,j] = 1 for all i where particles have been released
+# i.e. migr[i,j] = proportion of mass in i that came from one of the source polygons j
+
+hist(apply(migr[[1]],1,sum,na.rm=TRUE))
+hist(apply(migr[[1]],2,sum,na.rm=TRUE))
+```
+
+
+Plot water residency by polygon
+```{r}
+diag(conn[[1]])
+modelled.poly <- which(apply(conn[[1]],2,sum)>0)
+notmodelled.poly <- which(apply(conn[[1]],2,sum)==0)
+```
+
+```{r}
+residency.list <- as.data.frame(sapply(conn, function(pmat) diag(pmat)))
+residency.list[notmodelled.poly,] <- NA
+residency.list <- data.frame(CLUSTER_ID=1:nrow(residency.list), residency.list)
+residency.list[1:3,]
+```
+
+```{r}
+xrange <- range(residency.list[,-1])
+breaks <- seq(from=0, to=1, length=9)
+plot(merge(marlpoly_sf.trim, residency.list)["X20180404"],
+     key.pos=4, reset=FALSE,
+     breaks=breaks, main="Residency")
+```
+
+```{r}
+xrange <- range(residency.list[,-1])
+breaks <- seq(from=0, to=1, length=9)
+plot(merge(marlpoly_sf.trim, residency.list)["X20180404"],
+     key.pos=4, reset=FALSE,
+     breaks=breaks, main="Residency",
+     xlim=xlim.nydia, ylim=ylim.nydia)
+box()
+```
+
+
+```{r}
+print(poly_animated)
+```
+
+
+

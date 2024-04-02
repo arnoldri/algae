@@ -1,0 +1,363 @@
+---
+title: "CleanedData"
+output: html_document
+date: "2024-04-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Packages + set up
+load("opar.Rda")
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(maps)
+library(sf)
+library(geojsonsf)
+library(rmapshaper)
+library(magick)
+
+library(algae)
+source("funcs.R")
+source("maps.R")
+```
+
+Subsets of Tasman/Marlborough
+
+```{r}
+bbox.tasmar <- c(1570,5370,1725,5520)*1000
+xlim.tasmar <- bbox.tasmar[c(1,3)]
+ylim.tasmar <- bbox.tasmar[c(2,4)]
+
+bbox.marlselect <- c(1645,5415,1720,5495)*1000
+bbox.marlselect <- c(1645,5412,1725,5502)*1000
+xlim.marlselect <- bbox.marlselect[c(1,3)]
+ylim.marlselect <- bbox.marlselect[c(2,4)]
+xlim.havelock <- c(1660,1675)*1000
+ylim.havelock <- c(5425,5440)*1000
+xlim.nydia <- c(1662,1677)*1000
+ylim.nydia <- c(5437,5450)*1000
+xlim.arapawa <- c(1695,1718)*1000
+ylim.arapawa <- c(5432,5452)*1000
+
+# Coastal polygons for mapping
+bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
+                                                 bbox.marlselect[c(2,2,4,4,2)])))
+coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
+
+bbox.tasmar.polygon <- st_polygon(list(cbind(bbox.tasmar[c(1,3,3,1,1)],
+                                             bbox.tasmar[c(2,2,4,4,2)])))
+coast.tasmar <- st_crop(coast, bbox.tasmar.polygon)
+
+# polygons in model
+habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
+habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
+marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons_volume.geojson")
+marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
+
+marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
+
+globalcrs <- 4326
+marlcrs <- st_crs(marlpoly_sf.trim)
+```
+```{r}
+list.files("data/confidential")
+```
+
+## Locations
+
+Note: corrected locations as follows in the file "Raw_MSQP_Locations-Corrected.csv"
+
+```{r}
+fname <- paste0("data/confidential/","Raw_MSQP_Locations-Corrected.csv")
+habloc <- read.csv(fname)
+# convert locations to sf object
+habloc_sf <- st_as_sf(habloc %>% mutate(xp=x,yp=y), 
+                      coords=c("xp","yp"),
+                      crs=marlcrs,
+                      agr="constant")
+
+# identify which polygon each location falls into
+habloc_sf <- habloc_sf %>% 
+  mutate(intersection=as.integer(st_intersects(geometry, marlpoly_sf)),
+         CLUSTER_ID=if_else(is.na(intersection),NA,marlpoly_sf$CLUSTER_ID[intersection])) %>%
+  select(-intersection)
+
+habloc <- habloc_sf %>% st_drop_geometry()
+```
+
+```{r}
+plot(coast.tasmar$geometry, col="dark green", reset=FALSE, xlim=xlim.tasmar, ylim=ylim.tasmar)
+rect(xlim.tasmar[1], ylim.tasmar[1], xlim.tasmar[2], ylim.tasmar[2])
+plot(st_geometry(habloc_sf), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Tasman/Malborough")
+```
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect)
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(habloc_sf), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Malborough")
+```
+
+Which points are not matched to a polygon?
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect)
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(habloc_sf %>% filter(is.na(CLUSTER_ID))), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Malborough\nnot matched to an ocean polygon")
+```
+
+```{r}
+idx <- sapply(st_within(habloc_sf, bbox.marlselect.polygon),length)==1
+#View(habloc_sf %>% filter(is.na(CLUSTER_ID) & idx)) #%>% as.data.frame()
+outofarea_sf <- habloc_sf %>% filter(is.na(CLUSTER_ID) & idx) 
+
+# Find the closest polygon
+closest <- list()
+for(i in seq_len(nrow(outofarea_sf))){
+    closest[[i]] <- marlpoly_sf.trim[which.min(st_distance(marlpoly_sf.trim, outofarea_sf[i,])),]
+}
+outofarea_sf$CLUSTER_ID_closest <- sapply(closest, function(x) x$CLUSTER_ID)
+outofarea <- outofarea_sf %>% st_drop_geometry()
+
+outofarea_sf
+## 6 sites, 2 repeats
+```
+
+ - G062 - D'Urville - fully outside tiled region - no match: remove
+ - G086 - Head Nikau - close to shore - OK retain
+ - G128 - Cook Strait 1 - too far out: remove
+ - PG062 - D'Urville - fully outside tiled region - no match: remove
+ - PG086 - Head Nikau - close to shore - OK retain
+ - PG128 - Robertson Point - to far out to sea - no match: remove
+
+```{r}
+outofarea_retain_sf <- outofarea_sf %>% filter(siteID%in%c("G086","PG086"))
+outofarea_retain_sf
+```
+
+```{r}
+plot(st_geometry(coast.marlselect), reset=FALSE, col="darkgreen",
+     main="Matching out of area sites to nearest polygon")
+plot(st_geometry(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%outofarea_retain_sf$CLUSTER_ID_closest)), col="yellow", add=TRUE)
+plot(st_geometry(outofarea_retain_sf), pch=16, col="red", cex=1, add=TRUE)
+axis(1); axis(2); box()
+```
+
+```{r}
+habloc_sf <- merge(habloc_sf, st_drop_geometry(outofarea_retain_sf)[,c("siteID","CLUSTER_ID_closest")], all.x=TRUE)
+idx <- is.na(habloc_sf$CLUSTER_ID) & !is.na(habloc_sf$CLUSTER_ID_closest)
+habloc_sf$CLUSTER_ID[idx] <- habloc_sf$CLUSTER_ID_closest[idx]
+habloc_sf$CLUSTER_ID_closest <- NULL
+habloc <- habloc_sf %>% st_drop_geometry()
+#write.csv(habloc, file="data/habloc.csv", row.names=FALSE)
+```
+
+```{r}
+habloc <- read.csv("data/habloc.csv")
+habloc_sf <- st_as_sf(habloc %>% mutate(xp=x,yp=y), 
+                      coords=c("xp","yp"),
+                      crs=marlcrs,
+                      agr="constant")
+```
+
+
+## Detections
+
+```{r, error=FALSE, message=FALSE, warning=FALSE}
+fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
+habdat <- read_excel(fname) %>% as.data.frame()
+#View(habdat)
+nrow(habdat) # 292786
+habdat <- habdat[habdat$Site_Code%in%habloc$siteID,]
+nrow(habdat) # 101842
+habdat[1:2,]
+
+# Create an event ID: combination of site, date (differing times are minor)
+habdat$date.time <- as.POSIXct(habdat$SAMPLED_DATE, format="%Y-%m-%d %H:%M:%S")
+habdat$date <- as.Date(habdat$date.time)
+habdat$year <- as.numeric(format(habdat$date,"%Y"))
+habdat$event <- gsub(" ","-",paste(habdat$Site_Code, substring(habdat$SAMPLED_DATE,1,10), sep="-"))
+# Retain only events from 2018 onwards
+habdat <- habdat[habdat$year>=2018,]
+nrow(habdat) # 52744
+```
+
+List of events
+```{r}
+event <- habdat %>% 
+           group_by(event) %>%
+           summarise(Site_Code=first(Site_Code), date=first(date), nsamples=n()) %>%
+           ungroup()
+nrow(event) # 7814
+```
+
+
+
+```{r}
+species.names <- c("Alexandrium pacificum","Alexandrium catenella",
+                   "Alexandrium spp.", 
+                   "Alexandrium cf. pacificum","Alexandrium cf. catenella")
+for(species in species.names) {
+  etmp <- habdat %>%
+    filter(REPORTED_NAME==species) %>%
+    group_by(event) %>%
+    summarise(n=n()) %>%
+    ungroup()
+  names(etmp) <- c("event",species)
+  event[,species] <- NULL
+  event <- merge(event,etmp,all.x=TRUE)
+  event[,species][is.na(event[,species])] <- 0
+}
+```
+
+```{r}
+apply(event[,species.names],2,sum)
+```
+
+Remove any events where there is an cf. or spp. detection but no definite detection
+```{r}
+event$remove <- ((event$"Alexandrium pacificum"==0 & event$"Alexandrium catenella"==0)
+                 &
+                 (event$"Alexandrium spp.">0 
+                  | event$"Alexandrium cf. pacificum">0 
+                  | event$"Alexandrium cf. catenella">0)
+                 )
+sum(event$remove) # 58
+```
+
+Also remove the event on PG091 on 2014-02-26 at 13:53:00 - test detections, values unreliable
+```{r}
+event[event$event=="PG091-2014-02-26-13:53:00",]
+event$remove[event$event=="PG091-2014-02-26-13:53:00"] <- TRUE
+```
+
+```{r}
+nrow(habdat) # 52744
+habdat <- habdat[!(habdat$event %in% event$event[event$remove]),]
+nrow(habdat) # 52265
+event <- event[!event$remove,]
+nrow(event) # 7756
+event$remove <- NULL
+```
+
+```{r}
+etmp <- habdat %>%
+    filter(REPORTED_NAME%in%species.names[1:2]) %>%
+    group_by(event) %>%
+    summarise(alex=n()) %>%
+    ungroup()
+event <- merge(event,etmp,all.x=TRUE)
+event$alex[is.na(event$alex)] <- 0
+nrow(event) # 7756
+table(event$alex) # 754 detection events
+```
+
+
+```{r}
+plot(event$date, event$alex)
+```
+
+Put each event in a polygon
+```{r}
+all(event$Site_Code %in% habloc$siteID) # TRUE
+event <- merge(event, 
+               habloc[,c("siteID","CLUSTER_ID","lon","lat","x","y")], 
+               by.x="Site_Code", by.y="siteID", all.x=TRUE)
+table(is.na(event$CLUSTER_ID)) # 1229 events NOT inside polygons 6527 events are in polygons
+#table(event$Site_Code, is.na(event$CLUSTER_ID))
+plot(event$x, event$y, col=ifelse(is.na(event$CLUSTER_ID),"blue","red"))
+event <- event[!is.na(event$CLUSTER_ID),]
+nrow(event) # 6527 events
+habdat <- habdat[habdat$event %in% event$event,]
+nrow(habdat) # 45346
+```
+
+Assign a week number to each event
+```{r}
+event$week <- date.as.week(event$date)
+event$year <- as.numeric(format(event$date,"%Y"))
+table(event$week)
+#any(is.na(event$week))
+sum(event$alex) # 725 events with a detection
+```
+
+Check for multiple events at the same location in the same week
+```{r}
+tt <- table(paste(event$Site_Code,event$week))
+tt[tt>1]
+# quite a few instances of this
+sum(tt[tt>1]) # 310 events
+length(tt[tt>1]) # 155 occasions
+ee <- names(tt[tt>1])
+event$alex[paste(event$Site_Code,event$week)%in%ee]
+View(event[paste(event$Site_Code,event$week)%in%ee,] %>% arrange(year,event))
+```
+
+For simplicity,  identify the first event in each week with a positive detection
+```{r}
+fevent <- event %>%
+  group_by(Site_Code,week) %>%
+  arrange(desc(alex),date) %>%
+  summarise(fevent=first(event),nobs=n(),alex=sum(alex)) %>%
+  ungroup()
+nrow(event) # 6527
+nrow(fevent) # 6372
+event$include <- event$event %in% fevent$fevent
+sum(event$include) # 6372
+sum(!event$include) # 155
+sum(event$alex[!event$include]) # removes 8 detections of Alexandrium
+```
+
+```{r}
+alex <- habdat[habdat$REPORTED_NAME %in% species.names[1:2],]
+is.unique(alex$event) # TRUE
+nrow(alex) # 725
+```
+
+```{r}
+nrow(event) # 6527
+event <- merge(event, alex[,c("event","REPORTED_NAME","Data_Value")],all.x=TRUE)
+nrow(event) # 6527
+```
+
+All units are cells/litre
+
+```{r}
+table(alex$Data_Value)
+event$Value <- ifelse(is.na(event$Data_Value) | 
+                        event$Data_Value=="Not Detected",0,
+                      as.numeric(event$Data_Value))
+table(event$Value,exclude=NULL)
+```
+
+Save the results
+
+```{r}
+event <- event %>%
+  select(event,include,Site_Code,date,week,year,
+         nsamples,alex,CLUSTER_ID,Value,
+         lon,lat,x,y,REPORTED_NAME,Data_Value)
+#write.csv(event,"data/events_alex.csv",row.names=FALSE)
+```
+
+```{r}
+event <- read.csv("Data/events_alex.csv")
+nrow(event) # 6527
+event <- event[event$include,]
+nrow(event) # 6372
+event$date <- as.Date(event$date)
+```
+
+

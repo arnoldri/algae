@@ -123,7 +123,7 @@ Questions for Romain:
           lon       lat       x       y
      174.3733 -41.13811 1715253 5445003
 
-   from Romain: -41.138812 174.368901
+   from Romain: -41.138812 174.368901: OK updated
 
 1. 86 of the locations have the same NNN designation, just with P or PG, and the same location
    Of the others with the same NNN most seem to be the close in location and name, 
@@ -139,7 +139,7 @@ Questions for Romain:
    they are likely just outside
    
 1. In the detection data, which REPORTED_NAME values should we use?  
-  e.g. All beginnning with "Alexandrium" or just "Alexandriam catanella" and "Alexandrium pacificum"?
+  e.g. All beginnning with "Alexandrium" or just "Alexandriam catenella" and "Alexandrium pacificum"?
   it'd be good to understand how to filter this data set as a whole - this might need a zoom call perhaps
   
   
@@ -148,6 +148,18 @@ Questions for Romain:
   be any catanella from 2018 onwards) [don't use Alexandrium SPP]
 * sites are available online
   https://mpi.maps.arcgis.com/apps/webappviewer/index.html?id=fbdacfcb945c46118ff105ee45142fbe
+  
+  Remove any cf. or spp. modifications of name: i.e. retain only detections
+  Alexandrium catenella
+  Alexandrium pacificum
+  
+  and remove
+  Alexandrium cf. catenella
+  Alexandrium cf. pacificum
+  Alexandrium spp.
+  
+* Multiple detections in one week: remove the detections at PG091 on 2014-02-26 at 13:53:00:
+  These were tests along a transect.
 
 ```{r}
 list.files("data/confidential")
@@ -161,13 +173,12 @@ Note: corrected locations as follows in the file "Raw_MSQP_Locations-Corrected.c
  - G062 - D'Urville - fully outside tiled region - no match: OK leave as non-matching - no change to coordinates
  - G086 - Head Nikau - close to shore - OK retain: match to closest polygon
  - G096 - Te Mahia - on land - and a long way in: clearly wrong!  On MPI map Te Mahia should be at x=1681390.0056, y=5436803.2623
-          But label on MPI map is G108?  
-          in our list though G108 is Port Hardy (which is on D'Urville Island...)
-          However MPI list of Port Hardy is G108 too, so the MPI map label is wrong too.
-          Need to fix these coordinates to x=1681390.0056, y=5436803.2623 lon=173.9709, lat=-41.21606
- - G105 - Black Rock - OK - this is at the head of an inlet - OK retain: match to closest polygon
+ 
+          Shift to 
+          173.9709359	-41.21606075
+ - G105 - Black Rock - Shift to 174.053254	-41.18998226
  - G128 - Cook Strait 1 - too far out: remove
- - PG017 - Anakoha Bay - OK - at the end of an inlet - OK retain: match to G017 (174.095 -41.004 1692086 5460222)
+ - PG017 - Anakoha Bay - shift to 174.1055036	-41.04969886: match to G017 (174.095 -41.004 1692086 5460222)
  - PG062 - D'Urville - fully outside tiled region - no match: remove
  - PG086 - Head Nikau - close to shore - OK retain: match to closest polygon
  - PG111 - Kenepuru Head - inland: should be the same as G111 (1693614 5441549), and not as recorded (1689756 5448481)
