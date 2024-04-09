@@ -58,14 +58,34 @@ coast.tasmar <- st_crop(coast, bbox.tasmar.polygon)
 # polygons in model
 habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
 habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
-marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons_volume.geojson")
-marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
+
+marlpoly_sf.old <- geojson_sf("data/Entire_marlb_polygons_volume-11Dec2023.geojson")
+#st_crs(marlpoly_sf.old)
+marlpoly_sf.old <- st_transform(marlpoly_sf.old, crs=st_crs(coast))
+marlpoly_sf <- marlpoly_sf.old
+
+#marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons_volume.geojson")
+#st_crs(marlpoly_sf)
+#marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
 
 marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
+#nrow(marlpoly_sf.trim) # 408
 
-globalcrs <- 4326
+globalcrs <- 4326 # standard lat/lon global coordinates
 marlcrs <- st_crs(marlpoly_sf.trim)
 ```
+
+
+
+```{r}
+plot(marlpoly_sf$geometry, xlim=xlim.marlborough, ylim=ylim.marlborough)
+plot(marlpoly_sf.old$geometry, xlim=xlim.marlborough, ylim=ylim.marlborough)
+
+plot(marlpoly_sf$geometry)
+plot(marlpoly_sf.old$geometry)
+#plot(marlpoly_sf.trim$geometry)
+```
+
 
 Locations
 
@@ -118,6 +138,12 @@ polydat <- event %>%
 
 polydat_sf <- merge(marlpoly_sf.trim, polydat, all.x=TRUE)
 polydat_sf$nobs[is.na(polydat_sf$nobs)] <- 0
+```
+
+
+```{r}
+plot(marlpoly_sf.trim)
+plot(polydat_sf)
 ```
 
 
@@ -284,7 +310,8 @@ getmatrices <- TRUE
 getmatrices <- FALSE
 if(getmatrices) {
   # Connection and migration matrices for the polygons
-  fname <- "data/connectivity_matrix.xlsx"
+  #fname <- "data/connectivity_matrix.xlsx"
+  fname <- "data/Connectivity_Matrices_exp_7_5.xlsx"
   nsheets <- length(excel_sheets(fname))
   conn <- lapply(1:nsheets, function(i) t(as.matrix(read_excel(fname, sheet=i, 
                                                                col_names=FALSE,
