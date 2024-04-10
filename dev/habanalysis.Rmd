@@ -5,10 +5,10 @@ date: "2024-04-02"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo=FALSE)
 ```
 
-```{r}
+```{r error=FALSE, warning=FALSE, message=FALSE}
 # Packages + set up
 load("opar.Rda")
 library(readxl)
@@ -56,36 +56,28 @@ bbox.tasmar.polygon <- st_polygon(list(cbind(bbox.tasmar[c(1,3,3,1,1)],
 coast.tasmar <- st_crop(coast, bbox.tasmar.polygon)
 
 # polygons in model
+# monitored polygons
 habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
 habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
 
-marlpoly_sf.old <- geojson_sf("data/Entire_marlb_polygons_volume-11Dec2023.geojson")
-#st_crs(marlpoly_sf.old)
-marlpoly_sf.old <- st_transform(marlpoly_sf.old, crs=st_crs(coast))
-marlpoly_sf <- marlpoly_sf.old
+# full polygon tiling of Marlborough
+marlpoly_sf.latlon <- geojson_sf("data/Entire_marlb_polygons_volume-latlon.geojson")
+#st_crs(marlpoly_sf.latlon)
+marlpoly_sf.latlon <- st_transform(marlpoly_sf.latlon, crs=st_crs(coast))
 
-#marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons_volume.geojson")
-#st_crs(marlpoly_sf)
-#marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
+marlpoly_sf.xy <- geojson_sf("data/Entire_marlb_polygons_volume-xy.geojson")
+#st_crs(marlpoly_sf.xy)
+marlpoly_sf.xy <- st_transform(marlpoly_sf.xy, crs=st_crs(coast))
 
+marlpoly_sf <- marlpoly_sf.latlon
 marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
 #nrow(marlpoly_sf.trim) # 408
 
 globalcrs <- 4326 # standard lat/lon global coordinates
-marlcrs <- st_crs(marlpoly_sf.trim)
+marlcrs.latlon <- st_crs(marlpoly_sf.latlon)
+marlcrs.xy <- st_crs(marlpoly_sf.xy)
+marlcrs <- marlcrs.latlon
 ```
-
-
-
-```{r}
-plot(marlpoly_sf$geometry, xlim=xlim.marlborough, ylim=ylim.marlborough)
-plot(marlpoly_sf.old$geometry, xlim=xlim.marlborough, ylim=ylim.marlborough)
-
-plot(marlpoly_sf$geometry)
-plot(marlpoly_sf.old$geometry)
-#plot(marlpoly_sf.trim$geometry)
-```
-
 
 Locations
 
@@ -142,8 +134,8 @@ polydat_sf$nobs[is.na(polydat_sf$nobs)] <- 0
 
 
 ```{r}
-plot(marlpoly_sf.trim)
-plot(polydat_sf)
+plot(marlpoly_sf.trim$geometry)
+plot(polydat_sf$geometry)
 ```
 
 
@@ -182,10 +174,32 @@ points(event$date[idx], match(event$CLUSTER_ID[idx],monitored.polygons),
 title("Detections by polygon over time (log scale)")
 ```
 
-```{r warning=FALSE, message=FALSE}
+```{r}
+
+```
+
+```{r}
 wmin <- min(event$week)
 wmax <- max(event$week)
+#make.movie <- TRUE
+make.movie <- FALSE
+```
 
+```{r}
+print(5)
+```
+
+
+```{r, eval=FALSE}
+print(pi)
+```
+
+```{r}
+print(5)
+```
+
+
+```{r, eval=make.movie, warning=FALSE, message=FALSE}
 par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
 logscale <- TRUE
 #logscale <- FALSE
@@ -249,6 +263,9 @@ if(!interactive) {
 }
 ```
 
+```{r}
+knitr::knit_exit()
+```
 
 # Connectivity and Migration matrices
 
@@ -306,72 +323,110 @@ then have unit column sums, and migrations ($Q$) have unit row sums
 Note range=cell_cols(1:408) specifies to read 408 columns - otherwise leading blank columns get dropped
 
 ```{r}
-getmatrices <- TRUE
+#getmatrices <- TRUE
 getmatrices <- FALSE
+```
+
+```{r}
 if(getmatrices) {
-  # Connection and migration matrices for the polygons
-  #fname <- "data/connectivity_matrix.xlsx"
+  # Connection matrices for the polygons
   fname <- "data/Connectivity_Matrices_exp_7_5.xlsx"
   nsheets <- length(excel_sheets(fname))
   conn <- lapply(1:nsheets, function(i) t(as.matrix(read_excel(fname, sheet=i, 
                                                                col_names=FALSE,
                                                                range=cell_cols(1:408)))))
   names(conn) <- excel_sheets(fname)
-
-  #fname <- "data/Migration_matrices_04_to_07_2018.xls"
-  fname <- "data/migration_matrix.xlsx"
-  nsheets <- length(excel_sheets(fname))
-  migr <- lapply(1:nsheets, function(i) t(as.matrix(read_excel(fname, sheet=i, 
-                                                               col_names=FALSE,
-                                                               range=cell_cols(1:408)))))
-  names(migr) <- excel_sheets(fname)
-  matdates <- as.Date(names(migr),format="%Y%m%d")
+  nmat <- length(conn)/2
+  migr <- conn[nmat+1:nmat]
+  conn <- conn[1:nmat]
+  names(migr) <- names(conn)
+  matdates <- as.Date(names(conn),format="%Y%m%d")
+  save("conn",file="data/conn2018.Rda")
+  save("migr",file="data/migr2018.Rda")
+} else {
+  load("data/conn2018.Rda") # creates conn
+  load("data/migr2018.Rda") # creates migr
+  matdates <- as.Date(names(conn),format="%Y%m%d")
 }
 #save.image()
 ```
 
+
 ```{r}
-sapply(conn,dim)-408
-sapply(migr,dim)-408
+sapply(conn,dim)-408 # matrices are 408 x 408
+sapply(migr,dim)-408 # matrices are 408 x 409
 ```
 
 Correctly identifies the columns as source polygons, rows as destinations
 
-The trouble is that particles have only been released in 40 of the polygons: not all 408
-
 ```{r}
-dim(migr[[1]])
+dim(conn[[1]]) # 408 rows x 408 columns
 
-range(apply(conn[[1]],1,sum,na.rm=TRUE)) # row sums 0 1.802315
-range(apply(conn[[1]],2,sum,na.rm=TRUE)) # col sums 0 1
+range(apply(conn[[1]],1,sum,na.rm=TRUE)) # row sums 0.2671909 1.802315
+range(apply(conn[[1]],2,sum,na.rm=TRUE)) # col sums range 0 1
+lost <- 1-apply(conn[[1]],2,sum) # proportion of mass from each polygon that is lost outwards
 
-table(apply(conn[[1]],1,sum,na.rm=TRUE)>0) # 320 nonzero,  88 zero
-table(apply(conn[[1]],2,sum,na.rm=TRUE)>0) #  40 nonzero, 368 zero
+table(apply(conn[[1]],1,sum,na.rm=TRUE)>0) # 408 nonzero,  0 zero
+table(apply(conn[[1]],2,sum,na.rm=TRUE)>0) # 407 nonzero,  1 zero
 #  conn[i,j] has sum_i conn[i,j] = 1 for all j where particles have been released
 #  i.e. conn[i,j] = proportion of mass from j that ends up in polygon i
 #       conn[i,j] = P_{ij}
 
-hist(apply(conn[[1]],1,sum,na.rm=TRUE))
-hist(apply(conn[[1]],2,sum,na.rm=TRUE))
+# which polygon loses all of its mass?
+i1 <- which.min(apply(conn[[1]],2,sum)) # 195
+marlpoly_sf %>% filter(CLUSTER_ID==i1)
+
+#hist(apply(conn[[1]],1,sum,na.rm=TRUE))
+hist(apply(conn[[1]],2,sum,na.rm=TRUE), 
+     xlab="Proportion of mass remaining in tiling",
+     ylab="Number of source polygons",
+     main="Retention of mass in the polygon tiling")
 ```
 
 ```{r}
-range(apply(migr[[1]],1,sum,na.rm=TRUE)) # row sums 0 1
-range(apply(migr[[1]],2,sum,na.rm=TRUE)) # col sums 0 113.2058
+dim(migr[[1]]) # 408 rows x 409 columns
 
-table(apply(migr[[1]],1,sum,na.rm=TRUE)>0) # 320 nonzero,  88 zero
-table(apply(migr[[1]],2,sum,na.rm=TRUE)>0) #  40 nonzero, 368 zero
+range(apply(migr[[1]],1,sum,na.rm=TRUE)) # row sums 0.2671909 1.8655115
+range(apply(migr[[1]],2,sum,na.rm=TRUE)) # col sums 0 1
+
+table(apply(migr[[1]],1,sum,na.rm=TRUE)>0) # 408 nonzero,  0 zero
+table(apply(migr[[1]],2,sum,na.rm=TRUE)>0) # 408 nonzero,  1 zero
 # migr[i,j] has sum_j migr[i,j] = 1 for all i where particles have been released
-# i.e. migr[i,j] = proportion of mass in i that came from one of the source polygons j
+# i.e. migr[i,j] = proportion of mass in i that came from source polygon j
 
-hist(apply(migr[[1]],1,sum,na.rm=TRUE))
-hist(apply(migr[[1]],2,sum,na.rm=TRUE))
+# which polygon gains no mass?
+i1 <- which.min(apply(migr[[1]],2,sum)) # 195 - which has zero volume!
+marlpoly_sf %>% filter(CLUSTER_ID==i1)
+
+#hist(apply(migr[[1]],1,sum,na.rm=TRUE))
+hist(apply(migr[[1]],2,sum,na.rm=TRUE),
+     xlab="Proportion of mass arriving from within the system",
+     ylab="Number of polygons",
+     main="Migration")
 ```
+
+```{r}
+range(conn[[1]][,195]) # 0 0 No mass from polygon 195 goes anywhere
+range(conn[[1]][195,]) # 0 0.2469852: some mass arrives here?
+which(conn[[1]][195,]>0) # from 9 polygons...  6  47  75  86 154 162 190 345 396
+
+range(migr[[1]][,195]) # 0 0 No mass in polygon 195 arrives from anywhere
+range(migr[[1]][195,]) # 0 0.2469852: some mass arrives here?
+which(migr[[1]][195,]>0) # from 9 polygons...  6  47  75  86 154 162 190 345 396
+```
+
+```{r}
+range(migr[[1]][,409])
+range(conn[[2]]-migr[[2]][,-409])
+migr[[1]][,409]
+dimnames(migr[[1]])
+```
+
 
 
 Plot water residency by polygon
 ```{r}
-diag(conn[[1]])
+#diag(conn[[1]])
 modelled.poly <- which(apply(conn[[1]],2,sum)>0)
 notmodelled.poly <- which(apply(conn[[1]],2,sum)==0)
 ```
@@ -380,21 +435,22 @@ notmodelled.poly <- which(apply(conn[[1]],2,sum)==0)
 residency.list <- as.data.frame(sapply(conn, function(pmat) diag(pmat)))
 residency.list[notmodelled.poly,] <- NA
 residency.list <- data.frame(CLUSTER_ID=1:nrow(residency.list), residency.list)
-residency.list[1:3,]
+#residency.list[1:3,]
 ```
 
 ```{r}
 xrange <- range(residency.list[,-1])
 breaks <- seq(from=0, to=1, length=9)
-plot(merge(marlpoly_sf.trim, residency.list)["X20180404"],
+plot(merge(marlpoly_sf.trim, residency.list)["X20180402"],
      key.pos=4, reset=FALSE,
      breaks=breaks, main="Residency")
+plot(marlpoly_sf %>% filter(CLUSTER_ID==195) %>% st_geometry(), add=TRUE, col="green")
 ```
 
 ```{r}
 xrange <- range(residency.list[,-1])
 breaks <- seq(from=0, to=1, length=9)
-plot(merge(marlpoly_sf.trim, residency.list)["X20180404"],
+plot(merge(marlpoly_sf.trim, residency.list)["X20180402"],
      key.pos=4, reset=FALSE,
      breaks=breaks, main="Residency",
      xlim=xlim.nydia, ylim=ylim.nydia)
