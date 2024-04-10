@@ -185,81 +185,70 @@ wmax <- max(event$week)
 make.movie <- FALSE
 ```
 
-```{r}
-print(5)
-```
-
-
-```{r, eval=FALSE}
-print(pi)
-```
-
-```{r}
-print(5)
-```
-
 
 ```{r, eval=make.movie, warning=FALSE, message=FALSE}
-par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
-logscale <- TRUE
-#logscale <- FALSE
-if(logscale) {
-  xrange <- log(1+range(event$Value)/1000)
-} else {
-  xrange <- range(event$Value)/1000
-}
-nbreaks <- 9
-breaks <- seq(from=xrange[1], to=xrange[2], length=nbreaks)
-colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
-outdir <- c("ignore/fig1/")
-fstem <- "poly1"
-ofile <- paste0("ignore/",fstem,".gif")
-interactive <- FALSE
-#interactive <- TRUE
-wrange <- wmin:wmax 
-#wrange <- wmin+0:10
-xlim <- xlim.marlselect; ylim <- ylim.marlselect
-xlim <- xlim.nydia; ylim <- ylim.nydia
-#date.axis <- FALSE
-date.axis <- TRUE
-i <- 0
-for(w in wrange) { 
-  thisweek.poly <- merge(marlpoly_sf.trim, 
-             event[event$week==w,c("CLUSTER_ID","Value")] %>% 
-               mutate(Value1000=Value/1000)) 
-  if(logscale) thisweek.poly$Value1000 <- log(1+thisweek.poly$Value1000)
-  i <- i+1
-  fname <- sprintf("%s/%s%04d.png", outdir, fstem, i)
-  if(!interactive) png(file=fname, width=480, height=480)
-  par(oma=c(3.1,0.5,0,0))
-  par(mar=1.1*c(2.5,1,4.1,4.1))
-  plot(thisweek.poly["Value1000"], 
-       pal=colvec,
-       key.pos=4,
-       breaks=breaks,
-       reset=FALSE, 
-       xlim=xlim, ylim=ylim, main="", axes=FALSE)
-  plot(st_geometry(coast.marlselect), col="light green", add=TRUE)
-  title(main=paste0("Week ",w))
-  box()
-  mtext(format(week.as.date(w), "%d-%m-%Y"), 
-        side=3, line=0, adj=1, cex=0.8)
-  mtext(ifelse(logscale,"Log scale","Linear scale"), 
-        side=3, line=0, adj=0, cex=0.8)
-  if(date.axis) {
-    par(usr=c(as.numeric(week.as.date(wrange[c(1,length(wrange))])),0,1))
-    axis.Date(1)
-    points(week.as.date(w),0,pch=16,cex=2,xpd=TRUE)
+if(make.movie) {
+  par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
+  logscale <- TRUE
+  #logscale <- FALSE
+  if(logscale) {
+    xrange <- log(1+range(event$Value)/1000)
+  } else {
+    xrange <- range(event$Value)/1000
   }
-  if(!interactive) dev.off()
-  #plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
-}
-par(opar)
-if(!interactive) {
-  image_list <- lapply(list.files(outdir,full.names=TRUE), image_read)
-  poly_animated <- image_animate(image_join(image_list), fps=20)
-  image_write(poly_animated, ofile)
-  unlink(list.files(outdir,full.names=TRUE))
+  nbreaks <- 9
+  breaks <- seq(from=xrange[1], to=xrange[2], length=nbreaks)
+  colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
+  outdir <- c("ignore/fig1/")
+  fstem <- "poly1"
+  ofile <- paste0("ignore/",fstem,".gif")
+  interactive <- FALSE
+  #interactive <- TRUE
+  wrange <- wmin:wmax 
+  #wrange <- wmin+0:10
+  xlim <- xlim.marlselect; ylim <- ylim.marlselect
+  xlim <- xlim.nydia; ylim <- ylim.nydia
+  #date.axis <- FALSE
+  date.axis <- TRUE
+  i <- 0
+  for(w in wrange) { 
+    thisweek.poly <- merge(marlpoly_sf.trim, 
+               event[event$week==w,c("CLUSTER_ID","Value")] %>% 
+                 mutate(Value1000=Value/1000)) 
+    if(logscale) thisweek.poly$Value1000 <- log(1+thisweek.poly$Value1000)
+    i <- i+1
+    fname <- sprintf("%s/%s%04d.png", outdir, fstem, i)
+    if(!interactive) png(file=fname, width=480, height=480)
+    par(oma=c(3.1,0.5,0,0))
+    par(mar=1.1*c(2.5,1,4.1,4.1))
+    plot(thisweek.poly["Value1000"], 
+         pal=colvec,
+         key.pos=4,
+         breaks=breaks,
+         reset=FALSE, 
+         xlim=xlim, ylim=ylim, main="", axes=FALSE)
+    plot(st_geometry(coast.marlselect), col="light green", add=TRUE)
+    title(main=paste0("Week ",w))
+    box()
+    mtext(format(week.as.date(w), "%d-%m-%Y"), 
+          side=3, line=0, adj=1, cex=0.8)
+    mtext(ifelse(logscale,"Log scale","Linear scale"), 
+          side=3, line=0, adj=0, cex=0.8)
+    if(date.axis) {
+      par(usr=c(as.numeric(week.as.date(wrange[c(1,length(wrange))])),0,1))
+      axis.Date(1)
+      points(week.as.date(w),0,pch=16,cex=2,xpd=TRUE)
+    }
+    if(!interactive) dev.off()
+    #plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+  }
+  par(opar)
+  if(!interactive) {
+    image_list <- lapply(list.files(outdir,full.names=TRUE), image_read)
+    poly_animated <- image_animate(image_join(image_list), fps=20)
+    image_write(poly_animated, ofile)
+    unlink(list.files(outdir,full.names=TRUE))
+  }
 }
 ```
 
@@ -436,6 +425,11 @@ residency.list <- as.data.frame(sapply(conn, function(pmat) diag(pmat)))
 residency.list[notmodelled.poly,] <- NA
 residency.list <- data.frame(CLUSTER_ID=1:nrow(residency.list), residency.list)
 #residency.list[1:3,]
+
+loss.list <- as.data.frame(sapply(conn, function(pmat) 1-apply(pmat,2,sum,na.rm=TRUE)))
+loss.list[notmodelled.poly,] <- NA
+loss.list <- data.frame(CLUSTER_ID=1:nrow(loss.list), loss.list)
+#loss.list[1:3,]
 ```
 
 ```{r}
@@ -456,6 +450,15 @@ plot(merge(marlpoly_sf.trim, residency.list)["X20180402"],
      xlim=xlim.nydia, ylim=ylim.nydia)
 box()
 ```
+
+```{r}
+xrange <- range(loss.list[,-1])
+breaks <- seq(from=0, to=1, length=9)
+plot(merge(marlpoly_sf.trim, loss.list)["X20180402"],
+     key.pos=4, reset=FALSE,
+     breaks=breaks, main="Mass loss: weekly proportions lost")
+```
+
 
 
 ```{r}
