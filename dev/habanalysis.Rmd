@@ -64,13 +64,16 @@ habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
 marlpoly_sf.latlon <- geojson_sf("data/Entire_marlb_polygons_volume-latlon.geojson")
 #st_crs(marlpoly_sf.latlon)
 marlpoly_sf.latlon <- st_transform(marlpoly_sf.latlon, crs=st_crs(coast))
+marlpoly_sf.latlon$volume <- marlpoly_sf.latlon$volume/1e9 # cubic km
 
 marlpoly_sf.xy <- geojson_sf("data/Entire_marlb_polygons_volume-xy.geojson")
 #st_crs(marlpoly_sf.xy)
 marlpoly_sf.xy <- st_transform(marlpoly_sf.xy, crs=st_crs(coast))
+marlpoly_sf.xy$volume <- marlpoly_sf.xy$volume/1e9 # cubic km
 
 marlpoly_sf <- marlpoly_sf.latlon
 marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
+marlpoly_sf.trim$area <- st_area(marlpoly_sf.trim)/1e6
 #nrow(marlpoly_sf.trim) # 408
 
 globalcrs <- 4326 # standard lat/lon global coordinates
@@ -78,6 +81,30 @@ marlcrs.latlon <- st_crs(marlpoly_sf.latlon)
 marlcrs.xy <- st_crs(marlpoly_sf.xy)
 marlcrs <- marlcrs.latlon
 ```
+
+```{r}
+plot(st_geometry(marlpoly_sf.trim),
+     reset=FALSE,
+     main="Polygons")
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+```
+
+```{r}
+plot(marlpoly_sf.trim["area"],
+     reset=FALSE, key.pos=4,
+     main="Polygon areas (sq km)")
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+```
+
+```{r}
+plot(marlpoly_sf.trim["volume"],
+     reset=FALSE, key.pos=4,
+     main="Polygon volumes (cubic km)")
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+```
+
+
+
 
 Locations
 
@@ -248,6 +275,7 @@ if(make.movie) {
     poly_animated <- image_animate(image_join(image_list), fps=20)
     image_write(poly_animated, ofile)
     unlink(list.files(outdir,full.names=TRUE))
+    print(poly_animated)
   }
 }
 ```
@@ -319,22 +347,17 @@ getmatrices <- FALSE
 ```{r}
 if(getmatrices) {
   # Connection matrices for the polygons
-  fname <- "data/Connectivity_Matrices_exp_7_5.xlsx"
+  fname <- "data/Connectivity_Matrices_exp_7_5.xlsx" # repeats matrices
   nsheets <- length(excel_sheets(fname))
+  nmat <- nsheets/2
   conn <- lapply(1:nsheets, function(i) t(as.matrix(read_excel(fname, sheet=i, 
                                                                col_names=FALSE,
                                                                range=cell_cols(1:408)))))
-  names(conn) <- excel_sheets(fname)
-  nmat <- length(conn)/2
-  migr <- conn[nmat+1:nmat]
-  conn <- conn[1:nmat]
-  names(migr) <- names(conn)
+  names(conn) <- excel_sheets(fname)[1:nmat]
   matdates <- as.Date(names(conn),format="%Y%m%d")
   save("conn",file="data/conn2018.Rda")
-  save("migr",file="data/migr2018.Rda")
 } else {
   load("data/conn2018.Rda") # creates conn
-  load("data/migr2018.Rda") # creates migr
   matdates <- as.Date(names(conn),format="%Y%m%d")
 }
 #save.image()
@@ -343,7 +366,6 @@ if(getmatrices) {
 
 ```{r}
 sapply(conn,dim)-408 # matrices are 408 x 408
-sapply(migr,dim)-408 # matrices are 408 x 409
 ```
 
 Correctly identifies the columns as source polygons, rows as destinations
@@ -372,43 +394,18 @@ hist(apply(conn[[1]],2,sum,na.rm=TRUE),
      main="Retention of mass in the polygon tiling")
 ```
 
-```{r}
-dim(migr[[1]]) # 408 rows x 409 columns
-
-range(apply(migr[[1]],1,sum,na.rm=TRUE)) # row sums 0.2671909 1.8655115
-range(apply(migr[[1]],2,sum,na.rm=TRUE)) # col sums 0 1
-
-table(apply(migr[[1]],1,sum,na.rm=TRUE)>0) # 408 nonzero,  0 zero
-table(apply(migr[[1]],2,sum,na.rm=TRUE)>0) # 408 nonzero,  1 zero
-# migr[i,j] has sum_j migr[i,j] = 1 for all i where particles have been released
-# i.e. migr[i,j] = proportion of mass in i that came from source polygon j
-
-# which polygon gains no mass?
-i1 <- which.min(apply(migr[[1]],2,sum)) # 195 - which has zero volume!
-marlpoly_sf %>% filter(CLUSTER_ID==i1)
-
-#hist(apply(migr[[1]],1,sum,na.rm=TRUE))
-hist(apply(migr[[1]],2,sum,na.rm=TRUE),
-     xlab="Proportion of mass arriving from within the system",
-     ylab="Number of polygons",
-     main="Migration")
-```
 
 ```{r}
 range(conn[[1]][,195]) # 0 0 No mass from polygon 195 goes anywhere
 range(conn[[1]][195,]) # 0 0.2469852: some mass arrives here?
 which(conn[[1]][195,]>0) # from 9 polygons...  6  47  75  86 154 162 190 345 396
-
-range(migr[[1]][,195]) # 0 0 No mass in polygon 195 arrives from anywhere
-range(migr[[1]][195,]) # 0 0.2469852: some mass arrives here?
-which(migr[[1]][195,]>0) # from 9 polygons...  6  47  75  86 154 162 190 345 396
 ```
 
 ```{r}
-range(migr[[1]][,409])
-range(conn[[2]]-migr[[2]][,-409])
-migr[[1]][,409]
-dimnames(migr[[1]])
+#range(migr[[1]][,409])
+#range(conn[[2]]-migr[[2]][,-409])
+#migr[[1]][,409]
+#dimnames(migr[[1]])
 ```
 
 
@@ -438,7 +435,7 @@ breaks <- seq(from=0, to=1, length=9)
 plot(merge(marlpoly_sf.trim, residency.list)["X20180402"],
      key.pos=4, reset=FALSE,
      breaks=breaks, main="Residency")
-plot(marlpoly_sf %>% filter(CLUSTER_ID==195) %>% st_geometry(), add=TRUE, col="green")
+#plot(marlpoly_sf %>% filter(CLUSTER_ID==195) %>% st_geometry(), add=TRUE, col="green")
 ```
 
 ```{r}
@@ -461,9 +458,6 @@ plot(merge(marlpoly_sf.trim, loss.list)["X20180402"],
 
 
 
-```{r}
-print(poly_animated)
-```
 
 Which polygons are in the Nydia area?
 ```{r}
