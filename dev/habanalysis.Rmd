@@ -160,10 +160,6 @@ polydat_sf$nobs[is.na(polydat_sf$nobs)] <- 0
 ```
 
 
-```{r}
-plot(marlpoly_sf.trim$geometry)
-plot(polydat_sf$geometry)
-```
 
 
 ```{r message=FALSE, warning=FALSE}
@@ -199,10 +195,6 @@ idx <- event$CLUSTER_ID%in%monitored.polygons
 points(event$date[idx], match(event$CLUSTER_ID[idx],monitored.polygons),
        pch=16, cex=0.5*log(event$Value[idx]/1000), col="#00995555")
 title("Detections by polygon over time (log scale)")
-```
-
-```{r}
-
 ```
 
 ```{r}
@@ -281,7 +273,7 @@ if(make.movie) {
 ```
 
 ```{r}
-knitr::knit_exit()
+#knitr::knit_exit()
 ```
 
 # Connectivity and Migration matrices
@@ -456,14 +448,44 @@ plot(merge(marlpoly_sf.trim, loss.list)["X20180402"],
      breaks=breaks, main="Mass loss: weekly proportions lost")
 ```
 
+Make adjacency matrix
+
+```{r}
+adjlist <- st_touches(marlpoly_sf.trim, marlpoly_sf.trim)
+nn <- length(adjlist)
+names(adjlist) <- marlpoly_sf.trim$CLUSTER_ID
+adjmat <- array(FALSE, dim=c(nn,nn))
+dimnames(adjmat) <- list(names(adjlist),names(adjlist))
+for(i in 1:nn) adjmat[i,adjmat[[i]]] <- TRUE
+all(adjmat==(t(adjmat))) # symmetric as it must be
+```
+
+```{r}
+cid <- 195
+plot(marlpoly_sf.trim%>%st_geometry(), reset=FALSE)
+plot(marlpoly_sf.trim%>%filter(CLUSTER_ID==cid)%>%st_geometry(), add=TRUE, col="red")
+```
+
+
+```{r}
+ic <- "195"
+idx <- as.numeric(c(ic, names(adjlist)[adjlist[[ic]]]))
+plot(marlpoly_sf.trim%>%filter(CLUSTER_ID%in%idx)%>%st_geometry(), reset=FALSE)
+plot(marlpoly_sf.trim%>%filter(CLUSTER_ID==ic)%>%st_geometry(), add=TRUE, col="green")
+```
 
 
 
 Which polygons are in the Nydia area?
-```{r}
-idx <- ((marlpoly_sf.trim$x>xlim.nydia[1] & marlpoly_sf.trim$x<xlim.nydia[2]) & 
-        (marlpoly_sf.trim$y>ylim.nydia[1] & marlpoly_sf.trim$y<ylim.nydia[2]) ) 
-marlpoly_sf.trim[idx,]
+```{r warning=FALSE}
+nydia_sf <- st_crop(marlpoly_sf.trim, 
+                    xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
+plot(nydia_sf %>% st_geometry())
+plot(nydia_sf %>% st_centroid(), pch="+", col="red", add=TRUE)
+#text(nydia_sf %>% st_centroid(), label=nydia_sf$CLUSTER_ID, col="blue")
+#text(nydia_sf$CLUSTER_ID, col="blue")
+#box(); axis(1); axis(2)
+#nydia_sf
 ```
 
 
