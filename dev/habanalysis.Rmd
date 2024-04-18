@@ -61,15 +61,33 @@ habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
 habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
 
 # full polygon tiling of Marlborough
+# File 1
 marlpoly_sf.latlon <- geojson_sf("data/Entire_marlb_polygons_volume-latlon.geojson")
 #st_crs(marlpoly_sf.latlon)
 marlpoly_sf.latlon <- st_transform(marlpoly_sf.latlon, crs=st_crs(coast))
 marlpoly_sf.latlon$volume <- marlpoly_sf.latlon$volume/1e9 # cubic km
+#range(marlpoly_sf.latlon$CLUSTER_ID); nrow(marlpoly_sf.latlon)
+# this includes CLUSTER_ID values 1-409, with 400 missing; 408 rows
 
+# File 2
 marlpoly_sf.xy <- geojson_sf("data/Entire_marlb_polygons_volume-xy.geojson")
 #st_crs(marlpoly_sf.xy)
 marlpoly_sf.xy <- st_transform(marlpoly_sf.xy, crs=st_crs(coast))
 marlpoly_sf.xy$volume <- marlpoly_sf.xy$volume/1e9 # cubic km
+#range(marlpoly_sf.xy$CLUSTER_ID); nrow(marlpoly_sf.xy)
+# this includes CLUSTER_ID values 1-408, with none missing; 408 rows
+
+# File 3
+marlpoly_sf.latlon <- geojson_sf("data/Entire_marlb_polygons_volume_above_15m.geojson")
+#st_crs(marlpoly_sf.latlon)
+marlpoly_sf.latlon <- st_transform(marlpoly_sf.latlon, crs=st_crs(coast))
+marlpoly_sf.latlon$volume <- marlpoly_sf.latlon$volume/1e9 # cubic km
+marlpoly_sf.latlon$volume_15 <- marlpoly_sf.latlon$volume_15/1e9 # cubic km
+range(marlpoly_sf.latlon$CLUSTER_ID); nrow(marlpoly_sf.latlon)
+# use the CLUSTER_ID values from the XY file
+marlpoly_sf.latlon <- rename(marlpoly_sf.latlon, CLUSTER_ID.old=CLUSTER_ID)
+marlpoly_sf.latlon <- merge(marlpoly_sf.latlon, marlpoly_sf.xy[,c("id","CLUSTER_ID")] %>% st_drop_geometry())
+#as.data.frame(marlpoly_sf.latlon)[marlpoly_sf.latlon$CLUSTER_ID!=marlpoly_sf.latlon$CLUSTER_ID.old,]
 
 marlpoly_sf <- marlpoly_sf.latlon
 marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
@@ -81,6 +99,7 @@ marlcrs.latlon <- st_crs(marlpoly_sf.latlon)
 marlcrs.xy <- st_crs(marlpoly_sf.xy)
 marlcrs <- marlcrs.latlon
 ```
+
 
 ```{r}
 plot(st_geometry(marlpoly_sf.trim),
@@ -451,9 +470,11 @@ plot(merge(marlpoly_sf.trim, loss.list)["X20180402"],
 Make adjacency matrix
 
 ```{r}
-adjlist <- st_touches(marlpoly_sf.trim, marlpoly_sf.trim)
-nn <- length(adjlist)
-names(adjlist) <- marlpoly_sf.trim$CLUSTER_ID
+adjlist.1 <- st_touches(marlpoly_sf.trim, marlpoly_sf.trim)
+nn <- length(adjlist.1)
+names(adjlist.1) <- marlpoly_sf.trim$CLUSTER_ID
+adjlist <- lapply(adjlist.1, function (x) marlpoly_sf.trim$CLUSTER_ID[x])
+adjlist <- adjlist[order(as.numeric(names(adjlist)))]
 adjmat <- array(FALSE, dim=c(nn,nn))
 dimnames(adjmat) <- list(names(adjlist),names(adjlist))
 for(i in 1:nn) adjmat[i,adjmat[[i]]] <- TRUE
@@ -469,6 +490,8 @@ plot(marlpoly_sf.trim%>%filter(CLUSTER_ID==cid)%>%st_geometry(), add=TRUE, col="
 
 ```{r}
 ic <- "195"
+ic <- "400"
+#ic <- "409"
 idx <- as.numeric(c(ic, names(adjlist)[adjlist[[ic]]]))
 plot(marlpoly_sf.trim%>%filter(CLUSTER_ID%in%idx)%>%st_geometry(), reset=FALSE)
 plot(marlpoly_sf.trim%>%filter(CLUSTER_ID==ic)%>%st_geometry(), add=TRUE, col="green")
@@ -481,12 +504,71 @@ Which polygons are in the Nydia area?
 nydia_sf <- st_crop(marlpoly_sf.trim, 
                     xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
 plot(nydia_sf %>% st_geometry())
-plot(nydia_sf %>% st_centroid(), pch="+", col="red", add=TRUE)
-#text(nydia_sf %>% st_centroid(), label=nydia_sf$CLUSTER_ID, col="blue")
-#text(nydia_sf$CLUSTER_ID, col="blue")
-#box(); axis(1); axis(2)
-#nydia_sf
+text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
+     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
+```
+
+```{r}
+ggplot(nydia_sf) + 
+  geom_sf(fill=NA)  + 
+  geom_sf_label(aes(label=CLUSTER_ID), size=2) 
+```
+
+# Modelling events
+
+```{r}
+monitored.polygons <- event$CLUSTER_ID
+nmonitored <- length(monitored.polygons)
+plot(NA,NA, xlim=range(event$date), ylim=c(0,nmonitored+1), xlab="Date", ylab="", axes=FALSE)
+axis.Date(1); axis(2, at=1:nmonitored, lab=monitored.polygons, las=2, cex.axis=0.5); box()
+idx <- event$CLUSTER_ID%in%monitored.polygons
+#points(events.alex.week.2018$mDate[idx], match(events.alex.week.2018$CLUSTER_ID[idx],monitored.polygons),
+#       pch=16, cex=2*events.alex.week.2018$Value[idx]/1000/100, col="#00995555")
+points(event$date[idx], match(event$CLUSTER_ID[idx],monitored.polygons),
+       pch=16, cex=0.5*log(event$Value[idx]/1000), col="#00995555")
+title("Detections by polygon over time (log scale)")
+```
+
+Identify weeks in which something is happening
+```{r}
+np <- tapply(event$Value>0, event$week, sum)
+np <- as.data.frame(np)
+np$week <- as.numeric(rownames(np))
+np$date <- week.as.date(np$week)
+np <- np[order(np$week),]
+plot(np$date, np$np)
+range(diff(np$week)) # 1 1 - no missing weeks
+```
+
+Identify onset dates: increase from 0 to >0
+```{r}
+nw <- nrow(np)
+np$onset <- c(np$np[1]>0, np$np[-1]>0 & np$np[-nw]==0)
+plot(np$date, np$np)
+sum(np$onset) # 29
+abline(v=np$date[np$onset],col="red")
+```
+
+Plot detections over weeks
+```{r}
+w <- 2728
+np[np$week==w,]
+np[(np$week %in% (w-12+c(0:20))),]
+w <- 2716
+```
+
+```{r warning=FALSE}
+plot(marlpoly_sf.trim %>% st_geometry(), reset=FALSE)
+plot(coast.marlselect, col="darkgreen", add=TRUE)
+ee <- event[event$week==w,]
+plot(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%ee$CLUSTER_ID) %>% st_geometry(), add=TRUE, col="red ")
 ```
 
 
+
+Identify dates on which a monitored polygon switches on
+```{r}
+nrow(event)
+View(event)
+```
 
