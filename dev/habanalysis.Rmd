@@ -535,17 +535,24 @@ np <- tapply(event$Value>0, event$week, sum)
 np <- as.data.frame(np)
 np$week <- as.numeric(rownames(np))
 np$date <- week.as.date(np$week)
+np$year <- as.numeric(format(np$date,"%Y"))
+np$doy <- np$date - as.Date(paste0(np$year-1,"-08-01"),format="%Y-%m-%d") + 1
 np <- np[order(np$week),]
 plot(np$date, np$np)
 range(diff(np$week)) # 1 1 - no missing weeks
 ```
+
+```{r}
+plot(np$doy, np$np)
+```
+
 
 Identify onset dates: increase from 0 to >0
 ```{r}
 nw <- nrow(np)
 np$onset <- c(np$np[1]>0, np$np[-1]>0 & np$np[-nw]==0)
 plot(np$date, np$np)
-sum(np$onset) # 29
+#sum(np$onset) # 29
 abline(v=np$date[np$onset],col="red")
 ```
 
@@ -558,10 +565,14 @@ w <- 2716
 ```
 
 ```{r warning=FALSE}
-plot(marlpoly_sf.trim %>% st_geometry(), reset=FALSE)
-plot(coast.marlselect, col="darkgreen", add=TRUE)
-ee <- event[event$week==w,]
-plot(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%ee$CLUSTER_ID) %>% st_geometry(), add=TRUE, col="red ")
+for(w in 2716:2740) {
+   plot(marlpoly_sf.trim %>% st_geometry(), reset=FALSE)
+   plot(coast.marlselect, col="darkgreen", add=TRUE)
+   ee <- event[event$week==w,]
+   plot(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%ee$CLUSTER_ID[ee$Value>0]) %>% st_geometry(), add=TRUE, col="red")
+   plot(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%ee$CLUSTER_ID[ee$Value==0]) %>% st_geometry(), add=TRUE, col="lightgreen")
+   title(paste("Week",w))
+}
 ```
 
 
