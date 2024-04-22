@@ -66,7 +66,7 @@ marlpoly_sf.latlon <- geojson_sf("data/Entire_marlb_polygons_volume-latlon.geojs
 #st_crs(marlpoly_sf.latlon)
 marlpoly_sf.latlon <- st_transform(marlpoly_sf.latlon, crs=st_crs(coast))
 marlpoly_sf.latlon$volume <- marlpoly_sf.latlon$volume/1e9 # cubic km
-#range(marlpoly_sf.latlon$CLUSTER_ID); nrow(marlpoly_sf.latlon)
+#range(marlpoly_sf.latlon$CLUSTER_ID); nrow(marlpoly_sf.latlon)  # 1 409
 # this includes CLUSTER_ID values 1-409, with 400 missing; 408 rows
 
 # File 2
@@ -74,7 +74,7 @@ marlpoly_sf.xy <- geojson_sf("data/Entire_marlb_polygons_volume-xy.geojson")
 #st_crs(marlpoly_sf.xy)
 marlpoly_sf.xy <- st_transform(marlpoly_sf.xy, crs=st_crs(coast))
 marlpoly_sf.xy$volume <- marlpoly_sf.xy$volume/1e9 # cubic km
-#range(marlpoly_sf.xy$CLUSTER_ID); nrow(marlpoly_sf.xy)
+#range(marlpoly_sf.xy$CLUSTER_ID); nrow(marlpoly_sf.xy) # 1 408
 # this includes CLUSTER_ID values 1-408, with none missing; 408 rows
 
 # File 3
@@ -83,11 +83,16 @@ marlpoly_sf.latlon <- geojson_sf("data/Entire_marlb_polygons_volume_above_15m.ge
 marlpoly_sf.latlon <- st_transform(marlpoly_sf.latlon, crs=st_crs(coast))
 marlpoly_sf.latlon$volume <- marlpoly_sf.latlon$volume/1e9 # cubic km
 marlpoly_sf.latlon$volume_15 <- marlpoly_sf.latlon$volume_15/1e9 # cubic km
-range(marlpoly_sf.latlon$CLUSTER_ID); nrow(marlpoly_sf.latlon)
+# range(marlpoly_sf.latlon$CLUSTER_ID); nrow(marlpoly_sf.latlon) # 1 409
 # use the CLUSTER_ID values from the XY file
-marlpoly_sf.latlon <- rename(marlpoly_sf.latlon, CLUSTER_ID.old=CLUSTER_ID)
-marlpoly_sf.latlon <- merge(marlpoly_sf.latlon, marlpoly_sf.xy[,c("id","CLUSTER_ID")] %>% st_drop_geometry())
+#marlpoly_sf.latlon <- rename(marlpoly_sf.latlon, CLUSTER_ID.old=CLUSTER_ID)
+#marlpoly_sf.latlon <- merge(marlpoly_sf.latlon, marlpoly_sf.xy[,c("id","CLUSTER_ID")] %>% st_drop_geometry())
 #as.data.frame(marlpoly_sf.latlon)[marlpoly_sf.latlon$CLUSTER_ID!=marlpoly_sf.latlon$CLUSTER_ID.old,]
+
+# alternative method without merging: reduce CLUSTER_ID values by 1 if above 400
+marlpoly_sf.latlon <- rename(marlpoly_sf.latlon, CLUSTER_ID.old=CLUSTER_ID)
+marlpoly_sf.latlon$CLUSTER_ID <- ifelse(marlpoly_sf.latlon$CLUSTER_ID.old>400,
+                                        marlpoly_sf.latlon$CLUSTER_ID.old-1,marlpoly_sf.latlon$CLUSTER_ID)
 
 marlpoly_sf <- marlpoly_sf.latlon
 marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
@@ -122,7 +127,27 @@ plot(marlpoly_sf.trim["volume"],
 plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
 ```
 
+```{r}
+plot(marlpoly_sf.trim["volume_15"],
+     reset=FALSE, key.pos=4,
+     main="Polygon volumes to 15m (cubic km)")
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+```
 
+
+```{r}
+par(mfrow=c(2,2))
+plot(marlpoly_sf.trim$volume_15, 
+     marlpoly_sf.trim$area*(15/1000),
+     xlab="Volume to 15m",ylab="Area x 15m")
+abline(a=0,b=1,col="red")
+plot(marlpoly_sf.trim$volume, 
+     marlpoly_sf.trim$area*(15/1000),
+     xlab="Volume",ylab="Area x 15m")
+plot(marlpoly_sf.trim$volume, 
+     marlpoly_sf.trim$volume_15,
+     xlab="Volume",ylab="Volume to15m")
+```
 
 
 Locations
@@ -483,6 +508,7 @@ all(adjmat==(t(adjmat))) # symmetric as it must be
 
 ```{r}
 cid <- 195
+cid <- 400
 plot(marlpoly_sf.trim%>%st_geometry(), reset=FALSE)
 plot(marlpoly_sf.trim%>%filter(CLUSTER_ID==cid)%>%st_geometry(), add=TRUE, col="red")
 ```
@@ -536,25 +562,51 @@ np <- as.data.frame(np)
 np$week <- as.numeric(rownames(np))
 np$date <- week.as.date(np$week)
 np$year <- as.numeric(format(np$date,"%Y"))
-np$doy <- np$date - as.Date(paste0(np$year-1,"-08-01"),format="%Y-%m-%d") + 1
+np$doy <- as.integer(np$date - as.Date(paste0(np$year-1,"-08-01"),format="%Y-%m-%d") + 1)
+np$doy <- np$doy %% 365
+np$doy.date <- as.Date("2018-08-01") + np$doy - 1
 np <- np[order(np$week),]
-plot(np$date, np$np)
-range(diff(np$week)) # 1 1 - no missing weeks
+plot(np$date, np$np, xlab="Date", ylab="Number of active polgyons", axes=FALSE)
+box(); axis(2); axis.Date(1,format="%Y-%b",las=2)
+#range(diff(np$week)) # 1 1 - no missing weeks
+abline(v=as.Date("2018-04-02"),col="blue")
+abline(v=as.Date(matdates),col="blue")
 ```
 
+Blue lines here are the weeks for which we have transport matrices
+
 ```{r}
-plot(np$doy, np$np)
+date.as.week(as.Date(matdates)) # 2518-2529
 ```
+
+
+```{r}
+plot(np$doy.date, np$np, axes=FALSE, xlab="Wrapped date", ylab="Number of active polygons"); 
+box(); axis(2); axis.Date(side=1, format="%d-%b")
+```
+
+Events typically start in late December, and all events are ended by August.
 
 
 Identify onset dates: increase from 0 to >0
 ```{r}
 nw <- nrow(np)
-np$onset <- c(np$np[1]>0, np$np[-1]>0 & np$np[-nw]==0)
-plot(np$date, np$np)
-#sum(np$onset) # 29
-abline(v=np$date[np$onset],col="red")
+np$onset1 <- c(np$np[1]>0, np$np[-1]>0 & np$np[-nw]==0) # at least one null week
+np$onset2 <- c(np$np[1]>0, np$np[2]>0, np$np[-c(1,2)]>0 & np$np[-c(1,nw)]==0 & np$np[c(-nw+1,-nw)]==0) # at least two null weeks
+
+plot(np$date, np$np, xlab="Date", ylab="Number of active polygons", axes=FALSE)
+box(); axis(2); axis.Date(1,format="%Y-%b",las=2)
+#sum(np$onset1) # 29
+#sum(np$onset2) # 21
+abline(v=np$date[np$onset2],col="red")
 ```
+
+```{r}
+plot(np$doy.date, np$np, axes=FALSE, xlab="Wrapped date", ylab="Number of active polygons"); 
+box(); axis(2); axis.Date(side=1, format="%d-%b")
+abline(v=np$doy.date[np$onset2],col="red")
+```
+
 
 Plot detections over weeks
 ```{r}
@@ -565,13 +617,16 @@ w <- 2716
 ```
 
 ```{r warning=FALSE}
-for(w in 2716:2740) {
+#for(w in 2716:2740) {
+for(w in 2510:2540) { # 2018 event
+#for(w in 2510:2540) { # 2018 event
+#for(w in wmin:wmax) { # all data
    plot(marlpoly_sf.trim %>% st_geometry(), reset=FALSE)
    plot(coast.marlselect, col="darkgreen", add=TRUE)
    ee <- event[event$week==w,]
    plot(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%ee$CLUSTER_ID[ee$Value>0]) %>% st_geometry(), add=TRUE, col="red")
    plot(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%ee$CLUSTER_ID[ee$Value==0]) %>% st_geometry(), add=TRUE, col="lightgreen")
-   title(paste("Week",w))
+   title(paste0("Week ",w," (",format(week.as.date(w),format="%d-%b-%Y"),")"))
 }
 ```
 
@@ -580,6 +635,121 @@ for(w in 2716:2740) {
 Identify dates on which a monitored polygon switches on
 ```{r}
 nrow(event)
-View(event)
+#View(event)
 ```
+
+# Simulation
+
+```{r}
+pmat <- conn[[1]]
+dim(pmat) # 408 408
+hist(apply(pmat,2,sum))
+```
+
+```{r}
+draw.state <- function(yvec, mpoly, 
+                       breaks=NULL, zlim=NULL, nbreaks=11, main="", ...) {
+  if(is.null(breaks)) {
+    if(is.null(zlim)) zlim <- range(yvec)
+    if(zlim[1]==zlim[2]) zlim <- zlim + c(-1,+1)
+    breaks <- seq(from=zlim[1], to=zlim[2], length=nbreaks)
+  }
+  plot((mpoly %>% mutate(plotvalue=yvec))["plotvalue"], reset=FALSE, 
+       key.pos=4, breaks=breaks, main=main, ...)
+  invisible()
+}
+```
+
+
+```{r}
+mpoly <- marlpoly_sf.trim
+mpoly <- mpoly[order(mpoly$CLUSTER_ID),]
+mpoly$residency <- diag(pmat)
+vol15vec <- mpoly$volume_15
+vol15vec[vol15vec==0] <- min(vol15vec[vol15vec>0])
+resvec <- mpoly$residency
+npoly <- nrow(mpoly)
+par(opar)
+par(mfrow=c(2,2))
+draw.state(resvec,mpoly,main="Water Residency",zlim=c(0,1))
+par(opar)
+```
+
+
+```{r}
+lambda1 <- 1
+lambda2 <- 6
+beta <- 5
+p0 <- 0.5
+
+ic.nydia <- 32
+ic <- ic.nydia
+yvec <- rep(0,npoly)
+yvec[ic.nydia] <- 1
+nstep <- 5
+ymat <- array(0,dim=c(nstep,npoly))
+ymat[1,] <- yvec
+for(i in 2:nstep) {
+  ymat[i,] <- beta/vol15vec * (resvec/p0)^lambda2 * pmat%*%((resvec/p0)^lambda1*vol15vec*ymat[i-1,])
+}
+draw.state(yvec,mpoly,breaks=seq(from=0, to=1, length=11))
+```
+
+Autocorrelated function
+```{r}
+nstep <- 100
+rho <- 0.9; sigma <- 1
+evec <- rep(0,nstep)
+mu <- 0 ## -5
+evec[1] <- 1
+for(i in 2:nstep) evec[i] <- mu+rho*(evec[i-1]-mu) + sigma*rnorm(1,0,1)
+plot(1:nstep, expit(evec), type="l")
+```
+
+
+```{r}
+draw.state(mpoly$residency, mpoly, zlim=c(0,1), main="Residency", xlim=xlim.nydia, ylim=ylim.nydia)
+draw.state(mpoly$residency^lambda1, mpoly, zlim=c(0,1), main=expression("Residency"^(lambda[1])), xlim=xlim.nydia, ylim=ylim.nydia)
+draw.state(mpoly$residency^lambda2, mpoly, zlim=c(0,1), main=expression("Residency"^(lambda[2])), xlim=xlim.nydia, ylim=ylim.nydia)
+rr <- range(log(1+ymat))
+breaks <- seq(from=rr[1], to=rr[2], length=11)
+for(i in 1:nstep) {
+  draw.state(log(1+ymat[i,]), mpoly, main=i, breaks=breaks, xlim=xlim.nydia, ylim=ylim.nydia)
+}
+```
+
+```{r}
+rr <- range(log(1+ymat))
+breaks <- seq(from=rr[1], to=rr[2], length=11)
+for(i in 1:nstep) {
+  draw.state(log(1+ymat[i,]), mpoly, main=i, breaks=breaks)
+}
+```
+
+
+```{r warning=FALSE}
+nydia_sf <- st_crop(marlpoly_sf.trim, 
+                    xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
+plot(nydia_sf %>% st_geometry())
+text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
+     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
+```
+
+```{r}
+adjlist[[32]]
+adjlist[[200]]
+adjlist[[400]]
+adjlist[[73]]
+adjlist[c(255,404)]
+```
+
+```{r}
+ic <- 32
+pmat[order(pmat[,ic],decreasing=TRUE),ic][1:5]
+ic <- 200
+pmat[order(pmat[,ic],decreasing=TRUE),ic][1:5]
+```
+
+
+
 

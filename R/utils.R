@@ -82,3 +82,17 @@ unlock <- function() {
   #pacman::p_unlock()
   invisible()
 }
+
+############################################
+
+#' Logit function
+#'
+#' @export
+logit <- function(p) log(p/(1-p))
+
+#' Inverse logit function
+#'
+#' @export
+expit <- function(x) 1/(1+exp(-x))
+
+############################################
