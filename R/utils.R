@@ -48,7 +48,8 @@ make.monday <- function(dates) {
 #' Make a date in to a week number
 #'
 #' @export
-date.as.week <- function(dates) {
+date.as.week <- function(dates, ...) {
+  if(class(dates)!="Date") dates <- as.Date(dates, ...)
   as.integer(dates+3)%/%7
 }
 
@@ -82,6 +83,33 @@ unlock <- function() {
   #pacman::p_unlock()
   invisible()
 }
+
+##################################################
+
+#' Shortcut Drawing function
+#'
+#' @export
+draw.state <- function(yvec, mpoly,
+                       breaks=NULL, zlim=NULL, nbreaks=11, main="",
+                       add=FALSE,
+                       ...) {
+  if(is.null(breaks)) {
+    if(is.null(zlim)) zlim <- range(yvec)
+    if(zlim[1]==zlim[2]) zlim <- zlim + c(-1,+1)
+    breaks <- seq(from=zlim[1], to=zlim[2], length=nbreaks)
+  }
+  if(add) {
+    plot((mpoly %>% mutate(plotvalue=yvec))["plotvalue"],
+         add=TRUE,
+         key.pos=4, breaks=breaks, main=main, ...)
+  } else {
+    plot((mpoly %>% mutate(plotvalue=yvec))["plotvalue"],
+         reset=TRUE,
+         key.pos=4, breaks=breaks, main=main, ...)
+  }
+  invisible()
+}
+
 
 ############################################
 

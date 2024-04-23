@@ -4,7 +4,7 @@
 \alias{date.as.week}
 \title{Make a date in to a week number}
 \usage{
-date.as.week(dates)
+date.as.week(dates, ...)
 }
 \description{
 Make a date in to a week number
