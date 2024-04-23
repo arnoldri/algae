@@ -798,14 +798,20 @@ draw.state(mpoly$monitored,mpoly,main="Monitored polygons",zlim=c(0,1))
 ```{r}
 simstates <- function(pmat, volvec,
                       nstep=10, ic.source=32, a0=1,
-                      lambda1=1, lambda2=1, beta=1, p0=0.5) {
+                      lambda1=1, lambda2=1, beta=c(1,1), p0=0.5, ptvec=c(0.95, 0.70)) {
    npoly <- nrow(pmat)
    yvec <- rep(0,npoly)
    yvec[ic.nydia] <- 1
    ymat <- array(0,dim=c(nstep,npoly))
    ymat[1,] <- yvec
+   
+   # artificially set the state to 2 for the first 10 steps, 1 otherwise
+   # state 1 = decline, state 2 = growth
+   hvec <- rep(1,nstep)
+   hvec[1:min(nstep,10)] <- 2
+   
    for(i in 2:nstep) {
-      ymat[i,] <- beta/volvec * (resvec/p0)^lambda2 * pmat%*%((resvec/p0)^lambda1*volvec*ymat[i-1,])
+      ymat[i,] <- beta[hvec[i]]/volvec * (resvec/p0)^lambda2 * pmat%*%((resvec/p0)^lambda1*volvec*ymat[i-1,])
    }
    return(list(volvec=volvec, nstep=nstep, ic.source=ic.source, a0=a0, 
                lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0,
@@ -816,13 +822,34 @@ simstates <- function(pmat, volvec,
 
 ```{r}
 ic.nydia <- 32
-ic.source <- ic.nydia; a0 <- 1; 
-lambda1 <- 1; lambda2 <- 6; beta <- 5; p0 <- 0.5
+ic.source <- ic.nydia; a0 <- 1; ptvec <- c(0.95,0.7); nstep <- 20
 
+lambda1 <- 6; lambda2 <- 1; beta <- c(0.0001, 5); p0 <- 0.5
 set.seed(-1)
-sstate1 <- simstates(pmat, vol15vec, nstep=10, ic.source=ic.source, a0=a0, 
-                     lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0)
-draw.state(sstate1$ymat[1,],mpoly,breaks=seq(from=0, to=1, length=11))
+sstate1 <- simstates(pmat, vol15vec, nstep=nstep, ic.source=ic.source, a0=a0, 
+                     lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0, ptvec=ptvec)
+
+lambda1 <- 1; lambda2 <- 6; beta <- c(0.0001, 5); p0 <- 0.5
+set.seed(-2)
+sstate2 <- simstates(pmat, vol15vec, nstep=nstep, ic.source=ic.source, a0=a0, 
+                     lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0, ptvec=ptvec)
+
+lambda1 <- 1; lambda2 <- 6; beta <- c(0.0001, 20); p0 <- 0.5
+set.seed(-3)
+sstate3 <- simstates(pmat, vol15vec, nstep=nstep, ic.source=ic.source, a0=a0, 
+                     lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0, ptvec=ptvec)
+```
+
+
+```{r}
+sstate <- sstate1
+draw.state(mpoly$residency, mpoly, zlim=c(0,1), main="Residency", xlim=xlim.kp, ylim=ylim.kp)
+draw.state(mpoly$residency^sstate$lambda1, mpoly, zlim=c(0,1), 
+           main=bquote("Residency"^(lambda[1])*"; "*lambda[1]*"="*.(sstate$lambda1)),
+           xlim=xlim.kp, ylim=ylim.kp)
+draw.state(mpoly$residency^sstate$lambda2, mpoly, zlim=c(0,1), 
+           main=bquote("Residency"^(lambda[2])*"; "*lambda[2]*"="*.(sstate$lambda2)),
+           xlim=xlim.kp, ylim=ylim.kp)
 ```
 
 
@@ -831,23 +858,23 @@ draw.state(sstate1$ymat[1,],mpoly,breaks=seq(from=0, to=1, length=11))
 
 ```{r}
 sstate <- sstate1
-draw.state(mpoly$residency, mpoly, zlim=c(0,1), main="Residency", xlim=xlim.kp, ylim=ylim.kp)
-draw.state(mpoly$residency^sstate$lambda1, mpoly, zlim=c(0,1), main=expression("Residency"^(lambda[1])), 
-           xlim=xlim.kp, ylim=ylim.kp)
-draw.state(mpoly$residency^sstate$lambda2, mpoly, zlim=c(0,1), main=expression("Residency"^(lambda[2])), 
-           xlim=xlim.kp, ylim=ylim.kp)
 rr <- range(log(1+sstate$ymat))
 breaks <- seq(from=rr[1], to=rr[2], length=10)
 for(i in 1:nrow(sstate$ymat)) {
-  draw.state(log(1+sstate$ymat[i,]), mpoly, main=i, breaks=breaks, xlim=xlim.kp, ylim=ylim.kp)
+  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
+                 ", "*lambda[1]*"="*.(sstate$lambda1)*
+                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
+  draw.state(log(1+sstate$ymat[i,]), mpoly, main=ss, breaks=breaks, xlim=xlim.kp, ylim=ylim.kp)
 }
 ```
 
 ```{r}
+sstate <- sstate1
 idx <- mpoly$monitored
 for(i in 1:nrow(sstate$ymat)) {
-  ss <- bquote(.(i)*" ("*beta==.(beta)*", "*lambda[1]*"="*.(lambda1)*", "*lambda[2]*"="*.(lambda2)*", "*p[0]*"="*.(p0)*")")
-  #ss <- bquote("i")
+  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
+                 ", "*lambda[1]*"="*.(sstate$lambda1)*
+                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
   plot(mpoly %>% st_geometry(), reset=FALSE, xlim=xlim.kp, ylim=ylim.kp, main="")
   draw.state(log(1+sstate$ymat[i,idx]), mpoly %>% filter(idx), 
              breaks=breaks, add=TRUE)
@@ -855,50 +882,91 @@ for(i in 1:nrow(sstate$ymat)) {
 }
 ```
 
+
 ```{r}
-xlim <- xlim.kp
-ylim <- ylim.kp
-rr <- range(sstate$ymat)
-rr <- log(1+rr)
+sstate <- sstate2
+rr <- range(log(1+sstate$ymat))
 breaks <- seq(from=rr[1], to=rr[2], length=10)
-for(i in 1:nstep) { 
-   
-   m <- merge(mpoly, data.frame(CLUSTER_ID=1:npoly, Value=sstate$ymat[i,]))
-   m$Value[!m$monitored] <- NA
-   m$logValue <- log(1+m$Value)
-   plot(mpoly["logValue"],
-          reset=FALSE, main="", breaks=breaks, key.pos=4,
-          xlim=xlim, ylim=ylim) 
-   plot(coast.marlselect, col="darkgreen", add=TRUE)
-   
-   m <- m[m$monitored,]
-   m0 <- m[!is.na(m$Value) & m$Value==0,]
-   m1 <- m[!is.na(m$Value) & m$Value>0,]
-   points(m0 %>% st_centroid() %>% st_coordinates(), pch="+", col="blue")
-   points(m1 %>% st_centroid() %>% st_coordinates(), pch=16, cex=5*sqrt(m1$logValue/max(m1$logValue)), col="#AA000077")
-   #ee <- event[event$week==w,]
-   #plot(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%ee$CLUSTER_ID[ee$Value>0]) %>% st_geometry(), add=TRUE, col="red")
-   #plot(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%ee$CLUSTER_ID[ee$Value==0]) %>% st_geometry(), add=TRUE, col="lightgreen")
-   ss <- bquote(.(i)*" ("*beta==.(beta)*", "*lambda[1]*"="*.(lambda1)*", "*lambda[2]*"="*.(lambda2)*", "*p[0]*"="*.(p0)*")")
-   title(ss)
+for(i in 1:nrow(sstate$ymat)) {
+  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
+                 ", "*lambda[1]*"="*.(sstate$lambda1)*
+                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
+  draw.state(log(1+sstate$ymat[i,]), mpoly, main=ss, breaks=breaks, xlim=xlim.kp, ylim=ylim.kp)
 }
 ```
 
 ```{r}
-plot(mpoly %>% st_geometry(), reset=FALSE)
-plot(coast %>% st_geometry(), add=TRUE, col="darkgreen")
+sstate <- sstate3
+rr <- range(log(1+sstate$ymat))
+breaks <- seq(from=rr[1], to=rr[2], length=10)
+for(i in 1:nrow(sstate$ymat)) {
+  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
+                 ", "*lambda[1]*"="*.(sstate$lambda1)*
+                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
+  draw.state(log(1+sstate$ymat[i,]), mpoly, main=ss, breaks=breaks, xlim=xlim.kp, ylim=ylim.kp)
+}
 ```
 
 
+```{r}
+sstate <- sstate1
+idx <- mpoly$monitored
+for(i in 9:9) { #1:nrow(sstate$ymat)) {
+  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
+                 ", "*lambda[1]*"="*.(sstate$lambda1)*
+                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
+  plot(mpoly %>% st_geometry(), reset=FALSE, xlim=xlim.nydia, ylim=ylim.nydia, main="")
+  draw.state(log(1+sstate$ymat[i,idx]), mpoly %>% filter(idx), 
+             breaks=breaks, add=TRUE)
+  title(ss)
+}
+```
+
+```{r}
+sstate <- sstate2
+idx <- mpoly$monitored
+for(i in 9:9) { #1:nrow(sstate$ymat)) {
+  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
+                 ", "*lambda[1]*"="*.(sstate$lambda1)*
+                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
+  plot(mpoly %>% st_geometry(), reset=FALSE, xlim=xlim.nydia, ylim=ylim.nydia, main="")
+  draw.state(log(1+sstate$ymat[i,idx]), mpoly %>% filter(idx), 
+             breaks=breaks, add=TRUE)
+  title(ss)
+}
+```
+
+
+
 Autocorrelated function
+
 ```{r}
 nstep <- 100
 rho <- 0.9; sigma <- 1
 evec <- rep(0,nstep)
 mu <- 0 ## -5
 evec[1] <- 1
+set.seed(-1)
 for(i in 2:nstep) evec[i] <- mu+rho*(evec[i-1]-mu) + sigma*rnorm(1,0,1)
 plot(1:nstep, expit(evec), type="l")
+```
+
+Binary hidden state
+
+```{r}
+nstep <- 100
+p11 <- 0.95; p22 <- 0.8
+ptvec <- c(p11,p22) # persistence of the two states
+evec <- rep(0,nstep)
+evec[1] <- 1
+set.seed(-6)
+for(i in 2:nstep) {
+  evec[i] <- ifelse(rbinom(1,1,ptvec[evec[i-1]])==1, 
+                                     evec[i-1], # persist
+                                     ifelse(evec[i-1]==1,2,1)) # flip state
+}
+plot(1:nstep, evec, type="s", xlab="Time", ylab="State", axes=FALSE)
+axis(1); axis(2,at=c(1,2),lab=c("Off","On"))
 ```
 
 

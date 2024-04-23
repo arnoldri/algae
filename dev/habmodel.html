@@ -373,8 +373,9 @@ of water in polygon <span class="math inline">\(i\)</span> at each
 timestep</li>
 </ul>
 <p>Time evolution <span class="math display">\[
-   Y_{it} = (1-D_{t})\left[I_{it}A_{it} + \beta V_i^{-1}\sum_{j=1}^n
-P_{ij} (P_{jj})^\lambda V_j Y_{j,t-1}\right]
+   Y_{it} = (1-D_{t})\left[I_{it}A_{it} + \beta (P_{ii}/P_0)^{\lambda_2}
+V_i^{-1}\sum_{j=1}^n P_{ij} (P_{jj}/P_0)^{\lambda_1} V_j
+Y_{j,t-1}\right]
 \]</span></p>
 <p>Where</p>
 <ul>
