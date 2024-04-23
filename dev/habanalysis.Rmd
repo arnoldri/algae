@@ -971,10 +971,10 @@ axis(1); axis(2,at=c(1,2),lab=c("Off","On"))
 
 
 ```{r}
-rr <- range(log(1+ymat))
+rr <- range(log(1+sstate$ymat))
 breaks <- seq(from=rr[1], to=rr[2], length=11)
-for(i in 1:nrow(ymat)) {
-  draw.state(log(1+ymat[i,]), mpoly, main=i, breaks=breaks)
+for(i in 1:nrow(sstate$ymat)) {
+  draw.state(log(1+sstate$ymat[i,]), mpoly, main=i, breaks=breaks)
 }
 ```
 
