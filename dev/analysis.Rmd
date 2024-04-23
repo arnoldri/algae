@@ -1,0 +1,748 @@
+---
+title: "Analysis 1"
+author: "Richard Arnold"
+date: '2024-03-04'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+```
+
+```{r}
+load("opar.Rda")
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(maps)
+library(sf)
+library(geojsonsf)
+library(rmapshaper)
+library(magick)
+
+library(algae)
+source("funcs.R")
+source("maps.R")
+```
+
+# Geometry
+
+```{r}
+bbox.tasmar <- c(1570,5370,1725,5520)*1000
+xlim.tasmar <- bbox.tasmar[c(1,3)]
+ylim.tasmar <- bbox.tasmar[c(2,4)]
+
+bbox.marlselect <- c(1645,5415,1720,5495)*1000
+bbox.marlselect <- c(1645,5412,1725,5502)*1000
+xlim.marlselect <- bbox.marlselect[c(1,3)]
+ylim.marlselect <- bbox.marlselect[c(2,4)]
+xlim.havelock <- c(1660,1675)*1000
+ylim.havelock <- c(5425,5440)*1000
+xlim.nydia <- c(1662,1677)*1000
+ylim.nydia <- c(5437,5450)*1000
+xlim.arapawa <- c(1695,1718)*1000
+ylim.arapawa <- c(5432,5452)*1000
+
+# Coastal polygons for mapping
+bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
+                                                 bbox.marlselect[c(2,2,4,4,2)])))
+coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
+
+bbox.tasmar.polygon <- st_polygon(list(cbind(bbox.tasmar[c(1,3,3,1,1)],
+                                             bbox.tasmar[c(2,2,4,4,2)])))
+coast.tasmar <- st_crop(coast, bbox.tasmar.polygon)
+
+# polygons in model
+habspoly_sf <- geojson_sf("data/HABS_exp_6_release_polygons.geojson")
+habspoly_sf <- st_transform(habspoly_sf, crs=st_crs(coast))
+marlpoly_sf <- geojson_sf("data/Entire_marlb_polygons_volume.geojson")
+marlpoly_sf <- st_transform(marlpoly_sf, crs=st_crs(coast))
+
+marlpoly_sf.trim <- ms_erase(marlpoly_sf, coast.marlselect) 
+
+globalcrs <- 4326
+marlcrs <- st_crs(marlpoly_sf.trim)
+```
+
+# Polygons
+
+408 polygons tiling the Marlborough sounds
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(marlpoly_sf), col="yellow", add=TRUE)
+plot(st_geometry(st_centroid(marlpoly_sf)), pch="+", col="red", cex=0.7, add=TRUE)
+#box(); axis(1); axis(2)
+#rect(1660*1000, 5425*1000, 1675*1000, 5440*1000, border="red", lwd=2)
+```
+
+Havelock
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.havelock, ylim=ylim.havelock, 
+     reset=FALSE, main="Havelock"); 
+box()
+plot(st_geometry(marlpoly_sf.trim), col="yellow", add=TRUE)
+plot(st_geometry(st_centroid(marlpoly_sf.trim)), pch="+", col="red", cex=0.7, add=TRUE)
+```
+
+Nydia Bay
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.nydia, ylim=ylim.nydia, 
+     reset=FALSE, main="Nydia"); 
+box()
+plot(st_geometry(marlpoly_sf.trim), col="yellow", add=TRUE)
+plot(st_geometry(st_centroid(marlpoly_sf.trim)), pch="+", col="red", cex=0.7, add=TRUE)
+```
+
+Polgyon volumes
+
+```{r}
+plot((marlpoly_sf.trim %>% mutate(vol=volume/1e9))["vol"], key.pos=4, reset=FALSE, 
+     main="Polygon volumes and centroids")#, xlim=xlim.havelock, ylim=ylim.havelock)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+```
+
+Polygon mean depths
+
+```{r}
+plot((marlpoly_sf.trim %>% mutate(depth=volume/st_area(marlpoly_sf.trim)))["depth"], key.pos=4, reset=FALSE, 
+     main="Polygon mean depths and centroids")#, xlim=xlim.havelock, ylim=ylim.havelock)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+```
+
+# Connectivity/Migration
+
+## Notation
+
+In the matrices below the rows are the destination locations ($i=1,\dots,n$) and the columns are the source 
+locations ($j=1,\ldots,n$).
+
+At time step $t\rightarrow t+1$ we release Mass $M_{t.j}$ from polygon $j$.  Mass $M_{tij}$ arrives in polygon $i$
+from polygon $j$, thus
+\[
+   M_{t.j} = \sum_{i=1}^n M_{tij}
+\]
+The proportion of mass leaving polygon $j$ at time $t$ and arriving at polygon $i$ at time $t+1$ is
+\[
+   P_{tij} = \frac{M_{tij}}{M_{t.j}}
+\]
+with column sums
+\[
+   \sum_{i=1}^n P_{tij} = 1\qquad \text{for all polygons $j$ and times $t$}
+\]
+$P_t = (P_{tij})$ is the **connectivity matrix** at time $t$.
+
+The total mass arriving in polygon $i$ from all sources (including itself) is 
+\[
+   M_{ti.} = \sum_{j=1}^n M_{tij}
+\]
+The proportion of mass arriving in polygon $i$ at time $t+1$ that came from polygon $j$ at time $t$ is
+\[
+   Q_{tij} = \frac{M_{tij}}{M_{ti.}}
+\]
+with row sums
+\[
+   \sum_{i=1}^n Q_{tij} = 1\qquad \text{for all polygons $j$ and times $t$}
+\]
+$Q_t = (Q_{tij})$ is the **migration matrix** at time $t$.
+
+
+## Notes from Romain
+
+I am sending you 2 matrices with two different ways of computing the connectivity. 
+Each file has one sheet per release day and each sheet shows the connectivity after 7 days of tracking. 
+
+Rows represent the source locations and columns represent the receiving locations (ordered following the sampling stations ID). 
+
+In Connectivity_matrices_04_to_07_2018, you will find the connectivity represented as a percentage of the 
+total released at each sampling station, so each row almost add to 1 (some particles are not within a polygon 
+at the end of the run, and therefore they are not counted).
+
+In Migration_matrices_04_to_07_2018, you will find the connectivity normalized per column (sum to 1 per column). 
+This gives you the percentage of the contribution of each source location to a receiving location.
+
+**RA:** We reverse the rows/columns when reading in: connectivities ($P$) should then have unit column sums, and
+migrations ($Q$) have unit row sums
+
+Note range=cell_cols(1:408) specifies to read 408 columns - otherwise leading blank columns get dropped; 
+Alternatively use .name_repair = "minimal"
+
+```{r}
+getmatrices <- TRUE
+getmatrices <- FALSE
+if(!exists("conn")) {
+   if(file.exists("ignore/conn_migr.Rda")) {
+     load("ignore/conn_migr.Rda")
+   } else {
+     getmatrices <- TRUE
+   }
+}
+if(getmatrices) {
+  # Connection and migration matrices for the polygons
+  fname <- "data/connectivity_matrix.xlsx"
+  nsheets <- length(excel_sheets(fname))
+  conn <- lapply(1:nsheets, function(i) t(as.matrix(read_excel(fname, sheet=i, 
+                                                               col_names=FALSE,
+                                                               range=cell_cols(1:408)))))
+  names(conn) <- excel_sheets(fname)
+
+  #fname <- "data/Migration_matrices_04_to_07_2018.xls"
+  fname <- "data/migration_matrix.xlsx"
+  nsheets <- length(excel_sheets(fname))
+  migr <- lapply(1:nsheets, function(i) t(as.matrix(read_excel(fname, sheet=i, 
+                                                               col_names=FALSE,
+                                                               range=cell_cols(1:408)))))
+  names(migr) <- excel_sheets(fname)
+  matdates <- as.Date(names(migr),format="%Y%m%d")
+}
+#save(list=c("conn","migr"), file="ignore/conn_migr.Rda")
+#save.image()
+```
+
+```{r}
+# row sums
+range(apply(conn[[1]],1,sum,na.rm=TRUE)) # row sums 0 1.802315
+table(apply(conn[[1]],1,sum,na.rm=TRUE)>0) # 320 nonzero,  88 zero
+
+# col sums
+range(apply(conn[[1]],2,sum,na.rm=TRUE)) # col sums 0 1 - correct
+table(apply(conn[[1]],2,sum,na.rm=TRUE)>0) #  40 nonzero, 368 zero - should all be nonzero
+#  conn[i,j] has sum_i conn[i,j] = 1 for all j where particles have been released (col sums)
+#  i.e. conn[i,j] = proportion of mass from j that ends up in polygon i
+#       conn[i,j] = P_{ij}
+
+hist(apply(conn[[1]],1,sum,na.rm=TRUE))
+hist(apply(conn[[1]],2,sum,na.rm=TRUE))
+```
+
+**NOTE** Need matrices where particles are released from every polygon
+
+```{r}
+# row sums
+range(apply(migr[[1]],1,sum,na.rm=TRUE)) # row sums 0 1 - correct
+table(apply(migr[[1]],1,sum,na.rm=TRUE)>0) # 320 nonzero,  88 zero
+
+# col sums
+range(apply(migr[[1]],2,sum,na.rm=TRUE)) # col sums 0 113.2058
+table(apply(migr[[1]],2,sum,na.rm=TRUE)>0) #  40 nonzero, 368 zero 
+
+# migr[i,j] has sum_j migr[i,j] = 1 for all i where particles have been released (row sums)
+# i.e. migr[i,j] = proportion of mass in i that came from one of the source polygons j
+
+hist(apply(migr[[1]],1,sum,na.rm=TRUE))
+hist(apply(migr[[1]],2,sum,na.rm=TRUE))
+```
+
+Plot water residency by polygon
+```{r}
+modelled.poly <- which(apply(conn[[1]],2,sum)>0)
+notmodelled.poly <- which(apply(conn[[1]],2,sum)==0)
+```
+
+```{r}
+residency <- as.data.frame(sapply(conn, function(pmat) diag(pmat)))
+residency[notmodelled.poly,] <- NA
+residency <- data.frame(CLUSTER_ID=1:nrow(residency), residency)
+residency[1:3,]
+```
+
+Proportion of released particles that remain in each polygon
+
+```{r}
+xrange <- range(residency[,-1])
+breaks <- seq(from=0, to=1, length=9)
+plot(merge(marlpoly_sf.trim, residency)["X20180404"],
+     key.pos=4, reset=FALSE,
+     breaks=breaks, main="Residency")
+```
+
+```{r}
+xrange <- range(residency[,-1])
+breaks <- seq(from=0, to=1, length=9)
+plot(merge(marlpoly_sf.trim, residency)["X20180404"],
+     key.pos=4, reset=FALSE,
+     breaks=breaks, main="Residency - Havelock",
+     xlim=xlim.havelock, ylim=ylim.havelock)
+box()
+```
+
+```{r}
+xrange <- range(residency[,-1])
+breaks <- seq(from=0, to=1, length=9)
+plot(merge(marlpoly_sf.trim, residency)["X20180404"],
+     key.pos=4, reset=FALSE,
+     breaks=breaks, main="Residency - Nydia Bay",
+     xlim=xlim.nydia, ylim=ylim.nydia)
+box()
+```
+
+# Locations
+
+Locations
+
+Note: corrected locations as follows in the file "Raw_MSQP_Locations-Corrected.csv"
+
+ - PG121 - Onepipi - did not have lon/lat: corrected to same lon/lat as PG092 Onepipi
+ - G062 - D'Urville - fully outside tiled region - no match: OK leave as non-matching - no change to coordinates
+ - G086 - Head Nikau - close to shore - OK retain: match to closest polygon
+ - G096 - Te Mahia - on land - and a long way in: clearly wrong!  On MPI map Te Mahia should be at x=1681390.0056, y=5436803.2623
+          But label on MPI map is G108?  
+          in our list though G108 is Port Hardy (which is on D'Urville Island...)
+          However MPI list of Port Hardy is G108 too, so the MPI map label is wrong too.
+          Need to fix these coordinates to x=1681390.0056, y=5436803.2623 lon=173.9709, lat=-41.21606
+ - G105 - Black Rock - OK - this is at the head of an inlet - OK retain: match to closest polygon
+ - G128 - Cook Strait 1 - too far out: remove
+ - PG017 - Anakoha Bay - OK - at the end of an inlet - OK retain: match to G017 (174.095 -41.004 1692086 5460222)
+ - PG062 - D'Urville - fully outside tiled region - no match: remove
+ - PG086 - Head Nikau - close to shore - OK retain: match to closest polygon
+ - PG111 - Kenepuru Head - inland: should be the same as G111 (1693614 5441549), and not as recorded (1689756 5448481)
+           Need to fix these coordinates: match to G111 Kenepuru Head
+ - PG128 - Robertson Point - to far out to sea - no match: remove
+ - PG237 - Port Gore 3 - on land - clearly wrong - should be (1700423.1103 5454097.5219)
+           Need to fix these coordinates - match to G237 (1705190 5453050)
+
+Use all of these
+
+Read locations, and identify the polygon each one lies in
+
+```{r}
+fname <- paste0("data/confidential/","Raw_MSQP_Locations-Corrected.csv")
+habloc <- read.csv(fname)
+# convert locations to sf object
+habloc_sf <- st_as_sf(habloc %>% mutate(xp=x,yp=y), 
+                      coords=c("xp","yp"),
+                      crs=marlcrs,
+                      agr="constant")
+# identify which polygon each location falls into
+habloc_sf <- habloc_sf %>% 
+  mutate(intersection=as.integer(st_intersects(geometry, marlpoly_sf)),
+         CLUSTER_ID=if_else(is.na(intersection),NA,marlpoly_sf$CLUSTER_ID[intersection])) %>%
+  select(-intersection)
+```
+
+```{r}
+plot(coast.tasmar$geometry, col="dark green", reset=FALSE, xlim=xlim.tasmar, ylim=ylim.tasmar)
+rect(xlim.tasmar[1], ylim.tasmar[1], xlim.tasmar[2], ylim.tasmar[2])
+plot(st_geometry(habloc_sf), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Tasman/Malborough")
+```
+
+Which points are not matched to a polygon?
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect)
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+plot(st_geometry(habloc_sf %>% filter(is.na(CLUSTER_ID))), pch=16, col="red", add=TRUE)
+#points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Malborough\nnot matched to an ocean polygon")
+```
+
+```{r}
+idx <- sapply(st_within(habloc_sf, bbox.marlselect.polygon),length)==1
+#View(habloc_sf %>% filter(is.na(CLUSTER_ID) & idx)) #%>% as.data.frame()
+outofarea_sf <- habloc_sf %>% filter(is.na(CLUSTER_ID) & idx) 
+
+# Find the closest polygon
+closest <- list()
+for(i in seq_len(nrow(outofarea_sf))){
+    closest[[i]] <- marlpoly_sf.trim[which.min(st_distance(marlpoly_sf.trim, outofarea_sf[i,])),]
+}
+outofarea_sf$CLUSTER_ID_closest <- sapply(closest, function(x) x$CLUSTER_ID)
+outofarea <- outofarea_sf %>% st_drop_geometry()
+
+outofarea_sf
+## 7 sites, 2 are repeats
+```
+
+Simple feature collection with 7 features and 17 fields
+Geometry type: POINT
+Dimension:     XY
+Bounding box:  xmin: 1659699 ymin: 5416581 xmax: 1708427 ymax: 5469771
+Projected CRS: NZGD2000 / New Zealand Transverse Mercator 2000
+  siteID   X       site_name SITETYPE     lon     lat       x       y notes CLUSTER_ID  lon.mpi  lat.mpi F__OBJECTID  id
+1   G062  76        Durville    ESTAR 173.709 -40.921 1659699 5469771               NA       NA       NA          NA  NA
+2   G086 100      Head Nikau    ESTAR 173.896 -41.170 1675161 5441984               NA 173.8956 -41.1701         165  76
+3   G105 119      Black Rock    ESTAR 174.047 -41.114 1687903 5448060               NA       NA       NA          NA  NA
+4   G128 142   Cook Strait 1    ESTAR 174.297 -41.395 1708427 5416581               NA 174.2967 -41.3953         636 856
+5  PG062  43        Durville    PHYTO 173.709 -40.921 1659699 5469771               NA       NA       NA          NA  NA
+6  PG086  53      Head Nikau    PHYTO 173.896 -41.170 1675161 5441984               NA       NA       NA          NA  NA
+7  PG128  76 Robertson Point    PHYTO 174.297 -41.395 1708427 5416581               NA       NA       NA          NA  NA
+  sample_type          name                geometry CLUSTER_ID_closest
+1        <NA>          <NA> POINT (1659699 5469771)                227
+2          PP    Head Nikau POINT (1675161 5441984)                403
+3        <NA>          <NA> POINT (1687903 5448060)                 46
+4          SF Cook Strait 1 POINT (1708427 5416581)                334
+5        <NA>          <NA> POINT (1659699 5469771)                227
+6        <NA>          <NA> POINT (1675161 5441984)                403
+7        <NA>          <NA> POINT (1708427 5416581)                334
+
+```{r}
+for(i in seq_len(nrow(outofarea_sf))) {
+  sid <- outofarea_sf$siteID[i]
+  sname <- outofarea_sf$site_name[i]
+  cid <- outofarea_sf$CLUSTER_ID_closest[i]
+  idx <- habloc$siteID==sid
+  xy <- c(habloc$x[idx], habloc$y[idx])
+  plot(st_geometry(coast.marlselect), reset=FALSE, col="darkgreen",
+       xlim=xy[1]+c(-1,1)*8000,
+       ylim=xy[2]+c(-1,1)*8000,
+       main=paste0("Site ", sid, " Polygon ",cid, " (",sname,")"))
+  plot(st_geometry(marlpoly_sf.trim %>% filter(CLUSTER_ID==cid)), col="yellow", add=TRUE)
+  plot(st_geometry(outofarea_sf %>% filter(siteID==sid)), pch=16, col="red", cex=1, add=TRUE)
+  axis(1); axis(2); box()
+}
+```
+
+ - G062 - D'Urville - fully outside tiled region - no match: remove
+ - G086 - Head Nikau - close to shore - OK retain
+ - G105 - Black Rock - OK - this is at the head of an inlet - OK retain
+ - G128 - Cook Strait 1 - too far out: remove
+ - PG062 - D'Urville - fully outside tiled region - no match: remove
+ - PG086 - Head Nikau - close to shore - OK retain
+ - PG128 - Robertson Point - to far out to sea - no match: remove
+
+```{r}
+outofarea_retain_sf <- outofarea_sf %>% filter(siteID%in%c("G086","G105","PG086"))
+outofarea_retain_sf
+```
+
+```{r}
+plot(st_geometry(coast.marlselect), reset=FALSE, col="darkgreen",
+     main="Matching out of area sites to nearest polygon")
+plot(st_geometry(marlpoly_sf.trim %>% filter(CLUSTER_ID%in%outofarea_retain_sf$CLUSTER_ID_closest)), col="yellow", add=TRUE)
+plot(st_geometry(outofarea_retain_sf), pch=16, col="red", cex=1, add=TRUE)
+axis(1); axis(2); box()
+```
+
+```{r}
+habloc_sf <- merge(habloc_sf, st_drop_geometry(outofarea_retain_sf)[,c("siteID","CLUSTER_ID_closest")], all.x=TRUE)
+idx <- is.na(habloc_sf$CLUSTER_ID) & !is.na(habloc_sf$CLUSTER_ID_closest)
+habloc_sf$CLUSTER_ID[idx] <- habloc_sf$CLUSTER_ID_closest[idx]
+habloc_sf$CLUSTER_ID_closest <- NULL
+habloc <- habloc_sf %>% st_drop_geometry()
+#write.csv(habloc, file="data/habloc.csv", row.names=FALSE)
+```
+
+```{r}
+habloc <- read.csv("data/habloc.csv")
+habloc_sf <- st_as_sf(habloc %>% mutate(xp=x,yp=y), 
+                      coords=c("xp","yp"),
+                      crs=marlcrs,
+                      agr="constant")
+```
+
+# Detections
+
+Read large data set of detections
+
+```{r, error=FALSE, message=FALSE, warning=FALSE}
+fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
+habdat <- read_excel(fname) %>% as.data.frame()
+#View(habdat)
+nrow(habdat) # 292786
+habdat <- habdat[habdat$Site_Code%in%habloc$siteID,]
+nrow(habdat) # 101842
+```
+
+Assign each event to a polygon, and select only the relevant detections
+
+**Q:** is this the correct list?
+
+Alexandrium spp.
+Alexandrium cf. pacificum
+Alexandrium pacificum
+Alexandrium cf. catenella
+Alexandrium catenella
+
+```{r}
+habdat <- merge(habdat, habloc[,c("siteID","site_name","CLUSTER_ID","x","y")], by.x="Site_Code", by.y="siteID", all.x=TRUE)
+nrow(habdat) # 101842
+habdat <- habdat[!is.na(habdat$CLUSTER_ID),]
+nrow(habdat) # 88479
+#table(habdat$REPORTED_NAME)
+alexnames <- c("Alexandrium spp.",
+               "Alexandrium cf. pacificum","Alexandrium pacificum",
+               "Alexandrium cf. catenella","Alexandrium catenella")
+habdat.alex <- habdat[habdat$REPORTED_NAME%in%alexnames,]
+nrow(habdat.alex) # 887
+#table(habdat.alex$REPORTED_NAME)
+```
+
+Non-detections are not recorded, so we need to create sampling events, and assign a non-detection
+to all events where Alexandrium catanella/pacificum is not seen.
+
+```{r}
+events <- habdat %>% group_by(Site_Code,SITE_DESCRIPTION,SAMPLED_DATE) %>% summarise(ndetections=n()) %>% ungroup()
+nrow(events) # 12824
+```
+
+```{r}
+events.alex <- merge(events, 
+                     habdat.alex[,c("Site_Code","SITE_DESCRIPTION","SAMPLED_DATE","REPORTED_NAME",
+                                    "Data_Value","UNITS","x","y","site_name","CLUSTER_ID")],
+                     by=c("Site_Code","SITE_DESCRIPTION","SAMPLED_DATE"),
+                     all.x=TRUE)
+nrow(events.alex) # 12830: more than 12824: multiple Alexandrium detections in the same event
+```
+
+```{r}
+tt <- table(paste(habdat.alex$Site_Code,habdat.alex$SAMPLED_DATE))
+nn <- names(tt[tt>1])
+habdat.alex[paste(habdat.alex$Site_Code,habdat.alex$SAMPLED_DATE)%in%nn,]
+events.alex[paste(events.alex$Site_Code,events.alex$SAMPLED_DATE)%in%nn,]
+```
+
+2014 detections will be ignorable (use data from 2018 only)
+G010 and G073 remove Alexandrium spp. cases.
+Achieve this by taking the events with the maximum Data_Value
+
+```{r}
+idx <- paste(events.alex$Site_Code,events.alex$SAMPLED_DATE)%in%nn
+events.alex[idx,]
+d1 <- events.alex[idx,]
+d0 <- events.alex[!idx,]
+
+d1 <- d1 %>% 
+  group_by(Site_Code) %>%
+  filter(Data_Value==max(as.numeric(Data_Value),na.rm=TRUE)) %>%
+  ungroup() 
+d1
+events.alex <- rbind(d0,d1)
+nrow(events.alex) # 12824 - OK
+```
+
+Data transformation - form weeks (starting on Mondays)
+
+```{r}
+#table(events.alex$Data_Value)
+events.alex$Value <- as.numeric(events.alex$Data_Value)
+events.alex$Value[is.na(events.alex$Value)] <- 0 # "Not Detected" then becomes 0
+events.alex$site_name <- NULL; events.alex$x <- NULL; events.alex$y <- NULL; events.alex$CLUSTER_ID <- NULL
+events.alex$SITE_DESCRIPTION <- NULL
+events.alex$UNITS <- NULL
+events.alex <- merge(events.alex, habloc_sf[,c("siteID","site_name","x","y","CLUSTER_ID")] %>% st_drop_geometry(), 
+                     by.x="Site_Code", by.y="siteID", all.x=TRUE)
+#table(events.alex$ndetections,exclude=NULL)
+events.alex$REPORTED_NAME[is.na(events.alex$REPORTED_NAME)] <- "No detection"
+table(events.alex$REPORTED_NAME,exclude=NULL)
+events.alex$Date <- as.Date(substring(events.alex$SAMPLED_DATE,1,10), format="%Y-%m-%d")
+events.alex$DateTime <- as.POSIXct(events.alex$SAMPLED_DATE)
+
+# Convert dates to weeks: move the date back to the previous Monday
+events.alex$mDate <- make.monday(events.alex$Date)
+events.alex$mWeek <- date.as.week(events.alex$mDate) ### as.integer(events.alex$mDate+3)%/%7
+events.alex$mDay <- as.numeric(format(events.alex$Date,"%u"))
+
+table(format(events.alex$Date, "%a"))
+table(format(events.alex$mDate, "%a"))
+#gsub("-.$","-1",format(events.alex$Date, "%Y-%m-%u")[1:20])
+#gsub("-.$","w1",format(events.alex$Date, "%Y-%m-%u")[1:20])
+```
+
+```{r}
+#write.csv(events.alex %>% st_drop_geometry(),file="data/eventsAlexandrium.csv",row.names=FALSE)
+events.alex <- read.csv("data/eventsAlexandrium.csv")
+events.alex$Date <- as.Date(events.alex$Date)
+events.alex$mDate <- as.Date(events.alex$mDate)
+events.alex$DateTime <- as.POSIXct(events.alex$SAMPLED_DATE)
+nrow(events.alex)
+#View(events.alex)
+```
+
+Check for multiple events in the same week
+```{r}
+tt <- table(paste(events.alex$Site_Code,events.alex$mWeek))
+table(tt[tt>1])
+```
+
+This happens a lot!
+
+  2   5   6 
+215   2   3 
+
+**NOTE** Make a unique version - take the observation with the maximum non-missing value
+
+```{r}
+events.alex.week <- events.alex %>%
+                      group_by(CLUSTER_ID,mWeek) %>%
+                      filter(Value==max(Value,na.rm=TRUE)) %>%
+                      filter(row_number()==1) %>%
+                      ungroup()
+#View(events.alex.week)
+is.unique(paste(events.alex$CLUSTER_ID, events.alex$mWeek)) # FALSE
+is.unique(paste(events.alex.week$CLUSTER_ID, events.alex.week$mWeek)) # TRUE
+nrow(events.alex.week) # 12564
+```
+
+```{r}
+#write.csv(events.alex.week %>% st_drop_geometry(),file="data/eventsAlexandriumWeek.csv",row.names=FALSE)
+events.alex.week <- read.csv("data/eventsAlexandriumWeek.csv")
+events.alex.week$Date <- as.Date(events.alex.week$Date)
+events.alex.week$mDate <- as.Date(events.alex.week$mDate)
+events.alex.week$DateTime <- as.POSIXct(events.alex.week$SAMPLED_DATE)
+nrow(events.alex.week) # 12564
+#View(events.alex.week)
+```
+
+```{r}
+hist(events.alex$Date, breaks="years", 
+     main="Events over time", freq=TRUE)
+```
+
+```{r}
+plot(events.alex.week$Date, events.alex.week$Value, 
+     xlab="Date", ylab="Cells/litre",
+     main="Detections of Alexandrium")
+```
+
+Restrict to 1 Jan 2018 onwards
+```{r}
+events.alex.week.2018 <- events.alex.week %>% 
+  filter(Date>=as.Date("2018-01-01"))
+```
+
+
+Find the largest intensity observation in each polygon over the entire period (from 1 Jan 2018)
+```{r}
+maxobs <- events.alex.week.2018 %>%
+  group_by(CLUSTER_ID) %>% 
+  summarise(maxValue1000=max(Value,na.rm=TRUE)/1000, nobs=n()) %>%
+  ungroup()
+maxobs_sf <- merge(marlpoly_sf.trim, maxobs, all.x=TRUE)
+maxobs_sf$nobs[is.na(maxobs_sf$nobs)] <- 0
+nrow(maxobs_sf) # 408
+sum(is.na(maxobs_sf$maxValue1000)) # 343 - no observations in the dataset
+sum(maxobs_sf$maxValue1000>0,na.rm=TRUE) # 48
+sum(maxobs_sf$maxValue1000==0,na.rm=TRUE) # 17 have only zero observations
+nrow(maxobs) # 65 monitored polygons
+#View(maxobs_sf)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+plot((maxobs_sf %>% filter(nobs>0))["maxValue1000"], key.pos=4, reset=FALSE, 
+     main="Maximum Alexandrium detections")
+mtext("1-Jan-2018 to 26-Apr-2023", side=1, line=-0.5, cex=0.5, adj=1)#, xlim=xlim.havelock, ylim=ylim.havelock)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+plot((maxobs_sf %>% filter(nobs>0,maxValue1000==0))["maxValue1000"], col="white", add=TRUE)
+plot(st_centroid(maxobs_sf %>% filter(nobs>0,maxValue1000==0)), pch="+", col="red", add=TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+plot((maxobs_sf %>% filter(nobs>0))["maxValue1000"], key.pos=4, reset=FALSE, 
+     main="Maximum Alexandrium detections: Havelock", xlim=xlim.havelock, ylim=ylim.havelock)
+mtext("1-Jan-2018 to 26-Apr-2023", side=1, line=-0.5, cex=0.5, adj=1)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+plot((maxobs_sf %>% filter(nobs>0,maxValue1000==0))["maxValue1000"], col="white", add=TRUE)
+plot(st_centroid(maxobs_sf %>% filter(nobs>0,maxValue1000==0)), pch="+", col="red", add=TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+plot((maxobs_sf %>% filter(nobs>0))["maxValue1000"], key.pos=4, reset=FALSE, 
+     main="Maximum Alexandrium detections: Nydia Bay", xlim=xlim.nydia, ylim=ylim.nydia)
+mtext("1-Jan-2018 to 26-Apr-2023", side=1, line=-0.5, cex=0.5, adj=1)
+plot(st_geometry(coast.marlselect), col="darkgreen", add=TRUE)
+plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+plot((maxobs_sf %>% filter(nobs>0,maxValue1000==0))["maxValue1000"], col="white", add=TRUE)
+plot(st_centroid(maxobs_sf %>% filter(nobs>0,maxValue1000==0)), pch="+", col="red", add=TRUE)
+```
+
+
+```{r}
+wmin <- min(events.alex.week.2018$mWeek)
+wmax <- max(events.alex.week.2018$mWeek)
+c(wmin,wmax) # 2505-2782 (278 weeks)
+wmax-wmin+1
+```
+
+```{r}
+monitored.polygons <- maxobs$CLUSTER_ID
+nmonitored <- length(monitored.polygons)
+plot(NA,NA, xlim=range(events.alex.week.2018$Date), ylim=c(0,nmonitored+1), xlab="Date", ylab="", axes=FALSE)
+axis.Date(1); axis(2, at=1:nmonitored, lab=monitored.polygons, las=2, cex.axis=0.5); box()
+idx <- events.alex.week.2018$CLUSTER_ID%in%monitored.polygons
+#points(events.alex.week.2018$mDate[idx], match(events.alex.week.2018$CLUSTER_ID[idx],monitored.polygons),
+#       pch=16, cex=2*events.alex.week.2018$Value[idx]/1000/100, col="#00995555")
+points(events.alex.week.2018$mDate[idx], match(events.alex.week.2018$CLUSTER_ID[idx],monitored.polygons),
+       pch=16, cex=0.5*log(events.alex.week.2018$Value[idx]/1000), col="#00995555")
+title("Detections by polygon over time (log scale)")
+```
+
+
+```{r warning=FALSE, message=FALSE}
+par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
+logscale <- TRUE
+#logscale <- FALSE
+if(logscale) {
+  xrange <- log(1+range(events.alex.week.2018$Value)/1000)
+} else {
+  xrange <- range(events.alex.week.2018$Value)/1000
+}
+nbreaks <- 9
+breaks <- seq(from=xrange[1], to=xrange[2], length=nbreaks)
+colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
+outdir <- c("ignore/fig1/")
+fstem <- "poly1"
+ofile <- paste0("ignore/",fstem,".gif")
+
+interactive <- FALSE
+interactive <- TRUE
+wrange <- wmin:wmax 
+wrange <- wmin+0:10
+
+xlim <- xlim.marlselect; ylim <- ylim.marlselect
+xlim <- xlim.nydia; ylim <- ylim.nydia
+#date.axis <- FALSE
+date.axis <- TRUE
+i <- 0
+for(w in wrange) { 
+  thisweek.poly <- merge(marlpoly_sf.trim, 
+             events.alex.week.2018[events.alex.week.2018$mWeek==w,c("CLUSTER_ID","Value")] %>% 
+               mutate(Value1000=Value/1000)) 
+  if(logscale) thisweek.poly$Value1000 <- log(1+thisweek.poly$Value1000)
+  i <- i+1
+  fname <- sprintf("%s/%s%04d.png", outdir, fstem, i)
+  if(!interactive) png(file=fname, width=480, height=480)
+  par(oma=c(3.1,0.5,0,0))
+  par(mar=1.1*c(2.5,1,4.1,4.1))
+  plot(thisweek.poly["Value1000"], 
+       pal=colvec,
+       key.pos=4,
+       breaks=breaks,
+       reset=FALSE, 
+       xlim=xlim, ylim=ylim, main="", axes=FALSE)
+  plot(st_geometry(coast.marlselect), col="light green", add=TRUE)
+  title(main=paste0("Week ",w))
+  box()
+  mtext(format(week.as.date(w), "%d-%m-%Y"), 
+        side=3, line=0, adj=1, cex=0.8)
+  mtext(ifelse(logscale,"Log scale","Linear scale"), 
+        side=3, line=0, adj=0, cex=0.8)
+  if(date.axis) {
+    par(usr=c(as.numeric(week.as.date(wrange[c(1,length(wrange))])),0,1))
+    axis.Date(1)
+    points(week.as.date(w),0,pch=16,cex=2,xpd=TRUE)
+  }
+  if(!interactive) dev.off()
+  #plot(st_centroid(st_geometry(marlpoly_sf.trim)), pch="+", col="white", add=TRUE)
+}
+par(opar)
+if(!interactive) {
+  image_list <- lapply(list.files(outdir,full.names=TRUE), image_read)
+  poly_animated <- image_animate(image_join(image_list), fps=20)
+  image_write(poly_animated, ofile)
+  unlink(list.files(outdir,full.names=TRUE))
+}
+```
+

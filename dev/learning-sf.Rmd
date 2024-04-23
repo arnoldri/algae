@@ -1,0 +1,82 @@
+---
+title: "Learning sf"
+author: "Richard Arnold"
+date: '2024-01-30'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sf)
+library(rmapshaper)
+```
+
+```{r}
+# points
+p1 <- st_point(c(0,0))
+p2 <- st_point(c(1,0))
+p3 <- st_point(c(1,1))
+p4 <- st_point(c(0,1))
+
+ptmat1 <- rbind(p1,p2,p3,p4)
+set.seed(12345); ptmat2 <- array(rnorm(3*2), dim=c(3,2))
+ptmat3 <- ptmat1 + cbind(2,rep(0,4))
+
+pvec1 <- st_multipoint(ptmat1)
+pvec2 <- st_multipoint(ptmat2)
+pvec3 <- st_multipoint(ptmat3)
+linevec1 <- st_linestring(ptmat1)
+linevec2 <- st_linestring(ptmat2)
+linevec3 <- st_linestring(ptmat3)
+mline <- st_multilinestring(list(A=ptmat1, B=ptmat2, C=ptmat3))
+mline.v2 <- st_multilinestring(list(A=linevec1, B=linevec2, C=linevec3))
+
+poly1 <- st_polygon(list(ptmat1[c(1:nrow(ptmat1),1),]))
+poly2 <- st_polygon(list(ptmat2[c(1:nrow(ptmat2),1),]))
+poly3 <- st_polygon(list(ptmat3[c(1:nrow(ptmat3),1),]))
+poly12 <- st_polygon(list(ptmat1[c(1:nrow(ptmat1),1),],
+                          ptmat2[c(1:nrow(ptmat2),1),]))
+poly13 <- st_polygon(list(ptmat1[c(1:nrow(ptmat1),1),],
+                          ptmat3[c(1:nrow(ptmat3),1),]))  # this is polygon 1 with 3 as a hole in it
+mpoly <- st_multipolygon(list(list(ptmat1[c(1:nrow(ptmat1),1),]),
+                              list(ptmat2[c(1:nrow(ptmat2),1),]),
+                              list(ptmat3[c(1:nrow(ptmat3),1),])))
+mpoly13 <- st_multipolygon(list(list(ptmat1[c(1:nrow(ptmat1),1),]),
+                                list(ptmat3[c(1:nrow(ptmat3),1),])))
+dpoly12 <- st_difference(poly1, poly2)
+dpoly21 <- st_difference(poly2, poly1)
+dpoly13.2 <- st_difference(poly13, poly2)
+dpoly2.13 <- st_difference(poly2, poly13)
+dmpoly13.2 <- st_difference(mpoly13, poly2)
+dmpoly2.13 <- st_difference(poly2, mpoly13)
+```
+
+```{r}
+plot(poly1)
+plot(poly2)
+plot(poly13)
+plot(mpoly)
+plot(dpoly12)
+plot(dpoly21)
+plot(dpoly13.2)
+plot(dpoly2.13)
+plot(dmpoly13.2)
+plot(dmpoly2.13)
+plot(st_intersection(mpoly13,poly2))
+st_intersects(mpoly13,poly2)
+```
+
+
+```{r}
+plot(p1); box(); axis(1); axis(2)
+plot(pvec1); box(); axis(1); axis(2)
+plot(pvec2); box(); axis(1); axis(2)
+plot(linevec1, xlim=c(-1,1), ylim=c(-2,1)); box(); axis(1); axis(2)
+plot(linevec2, add=TRUE); box(); axis(1); axis(2)
+plot(mline)
+plot(mline.v2)
+```
+'
+```{r}
+#st_instersect(dpl)
+```

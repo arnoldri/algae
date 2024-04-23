@@ -1,0 +1,143 @@
+---
+title: "ActualData"
+author: "Richard Arnold"
+date: '2024-01-26'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+is.unique <- function(x) length(x)==length(unique(x))
+```
+
+```{r}
+load("opar.Rda")
+library(maps)
+library(sf)
+library(dplyr)
+library(geojsonsf)
+library(ggplot2)
+library(readxl)
+library(tidyr)
+source("funcs.R")
+source("maps.R")
+```
+
+```{r}
+bbox.tasmar <- c(1570,5370,1725,5520)*1000
+xlim.tasmar <- bbox.tasmar[c(1,3)]
+ylim.tasmar <- bbox.tasmar[c(2,4)]
+
+bbox.marlselect <- c(1645,5415,1720,5495)*1000
+bbox.marlselect <- c(1645,5412,1725,5502)*1000
+xlim.marlselect <- bbox.marlselect[c(1,3)]
+ylim.marlselect <- bbox.marlselect[c(2,4)]
+xlim.subset <- c(1660,1675)*1000
+ylim.subset <- c(5425,5440)*1000
+
+bbox.marlselect.polygon <- st_polygon(list(cbind(bbox.marlselect[c(1,3,3,1,1)],
+                                                 bbox.marlselect[c(2,2,4,4,2)])))
+coast.marlselect <- st_crop(coast, bbox.marlselect.polygon)
+
+bbox.tasmar.polygon <- st_polygon(list(cbind(bbox.tasmar[c(1,3,3,1,1)],
+                                             bbox.tasmar[c(2,2,4,4,2)])))
+coast.tasmar <- st_crop(coast, bbox.tasmar.polygon)
+```
+
+From Romain:
+
+The full dataset is named “All MSQP phyto data to 01.05.23”. 
+Coordinates for the sampling sites are located in the “Raw_MSQP_Locations”.
+
+Questions for Romain:
+
+1. there are 306 locations -- all are GNNNA or PGNNNA (NNN=three numeric digits)(A=letter A-Q) 
+1. location PG121 has no coordinates (lon=0, lat=0)
+1. 
+
+```{r}
+list.files("data/confidential")
+```
+
+Locations
+
+```{r}
+table(habdat$REPORTED_NAME)
+alexdat <- habdat[grepl("Alexandrium", habdat$REPORTED_NAME),]
+table(alexdat$Site_Code)
+
+table(alexdat$Site_Code[grepl("acific",alexdat$REPORTED_NAME)])
+```
+
+
+```{r}
+fname <- paste0("data/confidential/","Raw_MSQP_Locations.csv")
+habloc <- read.csv(fname)
+#View(habloc)
+nrow(habloc) # 306
+habloc[1:2,]
+
+range(habloc$lon) # min is zero
+habloc[habloc$lon==0,] # Location PG121 has lon=0, lat=0
+```
+
+
+```{r}
+plot(coast.tasmar$geometry, col="dark green", xlim=xlim.tasmar, ylim=ylim.tasmar); box()
+rect(xlim.tasmar[1], ylim.tasmar[1], xlim.tasmar[2], ylim.tasmar[2])
+points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Tasman/Malborough")
+```
+
+```{r}
+plot(coast.marlselect$geometry, col="dark green", xlim=xlim.marlselect, ylim=ylim.marlselect); box()
+rect(xlim.marlselect[1], ylim.marlselect[1], xlim.marlselect[2], ylim.marlselect[2])
+points(habloc$x, habloc$y, pch=16, col="red")
+title("Collection points in Malborough")
+```
+
+
+
+```{r, error=FALSE, message=FALSE, warning=FALSE}
+fname <- paste0("data/confidential/","All MSQP phyto data to 01.05.23.xlsx")
+habdat <- read_excel(fname)
+#View(habdat)
+nrow(habdat) # 292786
+habdat[1:2,]
+```
+
+
+```{r}
+idx <- habloc$lon!=0
+plot(habloc$lon[idx], habloc$lat[idx])
+```
+
+
+```{r}
+is.unique(habloc$siteID) # TRUE
+is.unique(habdat$Site_Code) # FALSE
+all(habdat$Site_Code %in% habloc$siteID) # FALSE
+sum(habdat$Site_Code %in% habloc$siteID)    # 101842
+sum(!(habdat$Site_Code %in% habloc$siteID)) # 190944
+nrow(habdat) # 292786
+sum(habdat$Site_Code %in% habloc$siteID)+sum(!(habdat$Site_Code %in% habloc$siteID)) # 292786
+
+table(habdat$Site_Code[(habdat$Site_Code %in% habloc$siteID)]) # G and PG sites only
+length(table(habdat$Site_Code[(habdat$Site_Code %in% habloc$siteID)])) # 156 sites
+
+table(habdat$Site_Code[!(habdat$Site_Code %in% habloc$siteID)]) # some G and PG sites (G02, G06, G09, PG254, PG271, PG272)
+# looks like G02, G06, G09 may be mislabelled?  should be G002, G006, G009? - esp relevant since G009 is Nydia Bay?
+
+table(habloc$siteID[!(habloc$siteID %in% habdat$Site_Code)])
+```
+
+```{r}
+#library(rjson)
+#list.files("../../data/confidential/MSQP_dataset/")
+#fname <- "../../data/confidential/MSQP_dataset/Raw_MSQP.json"
+#file.exists(fname)
+#jdat <- fromJSON(file=fname, simplify=TRUE)
+#fromJSON("../../../data/confidential")
+```
+

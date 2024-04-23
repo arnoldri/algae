@@ -1,0 +1,38 @@
+---
+title: "HAB model"
+output: html_document
+date: "2024-04-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Model involving residency
+
+* Polygons $i=1,\ldots,n$
+* Each polygon has volume $V_i$
+* At time $t$ polygon $i$ contains mass $X_{it}$ and therefore concentration
+  \[
+     Y_{it} = \frac{X_{it}}{V_i}
+  \]
+* $P_{ij}$ = proportion of mass of polygon $j$ that moves to polygon $i$ at each time step (initially fix this for all time)
+  \[
+      \sum_{i=1}^n P_{ij} = 1 \qquad \text{(mass conservation)}
+  \]
+  $P_{ii}$ is the residency of water in polygon $i$ at each timestep
+
+Time evolution
+\[
+   Y_{it} = (1-D_{t})\left[I_{it}A_{it} + \beta (P_{ii}/P_0)^{\lambda_2} V_i^{-1}\sum_{j=1}^n P_{ij} (P_{jj}/P_0)^{\lambda_1} V_j Y_{j,t-1}\right]
+\]
+
+Where
+
+ * $D_{t}\sim\text{Bern}(p)$ with $p$ the probability that the bloom ends (everywhere)
+ * $I_{it}\sim\text{Bern}(q_t P_{ii}^\nu)$ with $q_tP_{ii}^\nu$ the probability that a new bloom initiates
+   in polygon $i$ at time $t$.  $q_t$ is a seasonal scaling of the probability.
+ * If a bloom starts, then $A_{it}\sim\text{Gamma}(a,b)$ = the initiation bloom size (concentration)
+ * $\beta$ is the growth/survival parameter
+
+Note that the growth of a bloom depends on the residency
