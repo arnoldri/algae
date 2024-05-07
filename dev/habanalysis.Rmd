@@ -108,7 +108,19 @@ globalcrs <- 4326 # standard lat/lon global coordinates
 marlcrs.latlon <- st_crs(marlpoly_sf.latlon)
 marlcrs.xy <- st_crs(marlpoly_sf.xy)
 marlcrs <- marlcrs.latlon
+
+# Make adjacency matrix
+adjlist.1 <- st_touches(marlpoly_sf.trim, marlpoly_sf.trim)
+nn <- length(adjlist.1)
+names(adjlist.1) <- marlpoly_sf.trim$CLUSTER_ID
+adjlist <- lapply(adjlist.1, function (x) marlpoly_sf.trim$CLUSTER_ID[x])
+adjlist <- adjlist[order(as.numeric(names(adjlist)))]
+adjmat <- array(FALSE, dim=c(nn,nn))
+dimnames(adjmat) <- list(names(adjlist),names(adjlist))
+for(i in 1:nn) adjmat[i,adjmat[[i]]] <- TRUE
+#all(adjmat==(t(adjmat))) # symmetric as it must be
 ```
+
 
 
 ```{r}
@@ -199,6 +211,7 @@ nrow(event) # 6351
 ```
 
 Find number of detections and max observation value per polygon
+
 ```{r}
 polydat <- event %>%
   group_by(CLUSTER_ID) %>%
@@ -208,6 +221,11 @@ polydat <- event %>%
 
 polydat_sf <- merge(marlpoly_sf.trim, polydat, all.x=TRUE)
 polydat_sf$nobs[is.na(polydat_sf$nobs)] <- 0
+```
+
+```{r}
+save(event,file="data/event2018.Rda")
+save(polydat_sf,file="data/polydat2018.Rda")
 ```
 
 
@@ -537,20 +555,6 @@ for(i in 2:(ncol(residency.list)-1)) {
 ```
 
 
-Make adjacency matrix
-
-```{r}
-adjlist.1 <- st_touches(marlpoly_sf.trim, marlpoly_sf.trim)
-nn <- length(adjlist.1)
-names(adjlist.1) <- marlpoly_sf.trim$CLUSTER_ID
-adjlist <- lapply(adjlist.1, function (x) marlpoly_sf.trim$CLUSTER_ID[x])
-adjlist <- adjlist[order(as.numeric(names(adjlist)))]
-adjmat <- array(FALSE, dim=c(nn,nn))
-dimnames(adjmat) <- list(names(adjlist),names(adjlist))
-for(i in 1:nn) adjmat[i,adjmat[[i]]] <- TRUE
-all(adjmat==(t(adjmat))) # symmetric as it must be
-```
-
 ```{r}
 cid <- 195
 cid <- 400
@@ -575,6 +579,7 @@ Which polygons are in the Nydia area?
 ```{r warning=FALSE}
 nydia_sf <- st_crop(marlpoly_sf.trim, 
                     xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
+nydia_sf <- nydia_sf %>% filter(!(CLUSTER_ID%in%c(71,194,293)))
 plot(nydia_sf %>% st_geometry())
 text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
      lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
@@ -762,246 +767,5 @@ for(w in w1:w2) {
    title(paste0("Active Polygons in Week ",w," (",format(week.as.date(w),format="%d-%b-%Y"),")"))
 }
 ```
-
-
-# Simulation
-
-```{r}
-pmat <- conn[[1]]
-dim(pmat) # 408 408
-hist(apply(pmat,2,sum))
-```
-
-```{r}
-mpoly <- marlpoly_sf.trim
-mpoly <- mpoly[order(mpoly$CLUSTER_ID),]
-mpoly$residency <- diag(pmat)
-mpoly$monitored <- mpoly$CLUSTER_ID %in% unique(event$CLUSTER_ID)
-vol15vec <- mpoly$volume_15
-vol15vec[vol15vec==0] <- min(vol15vec[vol15vec>0])
-
-resvec <- mpoly$residency
-volvec <- vol15vec
-npoly <- nrow(mpoly)
-```
-
-```{r}
-draw.state(resvec,mpoly,main="Water Residency",zlim=c(0,1))
-```
-
-Monitored
-```{r}
-draw.state(mpoly$monitored,mpoly,main="Monitored polygons",zlim=c(0,1))
-```
-
-
-```{r}
-simstates <- function(pmat, volvec,
-                      nstep=10, ic.source=32, a0=1,
-                      lambda1=1, lambda2=1, beta=c(1,1), p0=0.5, ptvec=c(0.95, 0.70)) {
-   npoly <- nrow(pmat)
-   yvec <- rep(0,npoly)
-   yvec[ic.nydia] <- 1
-   ymat <- array(0,dim=c(nstep,npoly))
-   ymat[1,] <- yvec
-   
-   # artificially set the state to 2 for the first 10 steps, 1 otherwise
-   # state 1 = decline, state 2 = growth
-   hvec <- rep(1,nstep)
-   hvec[1:min(nstep,10)] <- 2
-   
-   for(i in 2:nstep) {
-      ymat[i,] <- beta[hvec[i]]/volvec * (resvec/p0)^lambda2 * pmat%*%((resvec/p0)^lambda1*volvec*ymat[i-1,])
-   }
-   return(list(volvec=volvec, nstep=nstep, ic.source=ic.source, a0=a0, 
-               lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0,
-               ymat=ymat))
-}
-```
-
-
-```{r}
-ic.nydia <- 32
-ic.source <- ic.nydia; a0 <- 1; ptvec <- c(0.95,0.7); nstep <- 20
-
-lambda1 <- 6; lambda2 <- 1; beta <- c(0.0001, 5); p0 <- 0.5
-set.seed(-1)
-sstate1 <- simstates(pmat, vol15vec, nstep=nstep, ic.source=ic.source, a0=a0, 
-                     lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0, ptvec=ptvec)
-
-lambda1 <- 1; lambda2 <- 6; beta <- c(0.0001, 5); p0 <- 0.5
-set.seed(-2)
-sstate2 <- simstates(pmat, vol15vec, nstep=nstep, ic.source=ic.source, a0=a0, 
-                     lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0, ptvec=ptvec)
-
-lambda1 <- 1; lambda2 <- 6; beta <- c(0.0001, 20); p0 <- 0.5
-set.seed(-3)
-sstate3 <- simstates(pmat, vol15vec, nstep=nstep, ic.source=ic.source, a0=a0, 
-                     lambda1=lambda1, lambda2=lambda2, beta=beta, p0=p0, ptvec=ptvec)
-```
-
-
-```{r}
-sstate <- sstate1
-draw.state(mpoly$residency, mpoly, zlim=c(0,1), main="Residency", xlim=xlim.kp, ylim=ylim.kp)
-draw.state(mpoly$residency^sstate$lambda1, mpoly, zlim=c(0,1), 
-           main=bquote("Residency"^(lambda[1])*"; "*lambda[1]*"="*.(sstate$lambda1)),
-           xlim=xlim.kp, ylim=ylim.kp)
-draw.state(mpoly$residency^sstate$lambda2, mpoly, zlim=c(0,1), 
-           main=bquote("Residency"^(lambda[2])*"; "*lambda[2]*"="*.(sstate$lambda2)),
-           xlim=xlim.kp, ylim=ylim.kp)
-```
-
-
-
-
-
-```{r}
-sstate <- sstate1
-rr <- range(log(1+sstate$ymat))
-breaks <- seq(from=rr[1], to=rr[2], length=10)
-for(i in 1:nrow(sstate$ymat)) {
-  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
-                 ", "*lambda[1]*"="*.(sstate$lambda1)*
-                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
-  draw.state(log(1+sstate$ymat[i,]), mpoly, main=ss, breaks=breaks, xlim=xlim.kp, ylim=ylim.kp)
-}
-```
-
-```{r}
-sstate <- sstate1
-idx <- mpoly$monitored
-for(i in 1:nrow(sstate$ymat)) {
-  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
-                 ", "*lambda[1]*"="*.(sstate$lambda1)*
-                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
-  plot(mpoly %>% st_geometry(), reset=FALSE, xlim=xlim.kp, ylim=ylim.kp, main="")
-  draw.state(log(1+sstate$ymat[i,idx]), mpoly %>% filter(idx), 
-             breaks=breaks, add=TRUE)
-  title(ss)
-}
-```
-
-
-```{r}
-sstate <- sstate2
-rr <- range(log(1+sstate$ymat))
-breaks <- seq(from=rr[1], to=rr[2], length=10)
-for(i in 1:nrow(sstate$ymat)) {
-  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
-                 ", "*lambda[1]*"="*.(sstate$lambda1)*
-                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
-  draw.state(log(1+sstate$ymat[i,]), mpoly, main=ss, breaks=breaks, xlim=xlim.kp, ylim=ylim.kp)
-}
-```
-
-```{r}
-sstate <- sstate3
-rr <- range(log(1+sstate$ymat))
-breaks <- seq(from=rr[1], to=rr[2], length=10)
-for(i in 1:nrow(sstate$ymat)) {
-  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
-                 ", "*lambda[1]*"="*.(sstate$lambda1)*
-                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
-  draw.state(log(1+sstate$ymat[i,]), mpoly, main=ss, breaks=breaks, xlim=xlim.kp, ylim=ylim.kp)
-}
-```
-
-
-```{r}
-sstate <- sstate1
-idx <- mpoly$monitored
-for(i in 9:9) { #1:nrow(sstate$ymat)) {
-  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
-                 ", "*lambda[1]*"="*.(sstate$lambda1)*
-                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
-  plot(mpoly %>% st_geometry(), reset=FALSE, xlim=xlim.nydia, ylim=ylim.nydia, main="")
-  draw.state(log(1+sstate$ymat[i,idx]), mpoly %>% filter(idx), 
-             breaks=breaks, add=TRUE)
-  title(ss)
-}
-```
-
-```{r}
-sstate <- sstate2
-idx <- mpoly$monitored
-for(i in 9:9) { #1:nrow(sstate$ymat)) {
-  ss <- bquote(.(i)*" ("*beta[1]*"="*.(sstate$beta[1])*"; "*beta[2]*"="*.(sstate$beta[2])*
-                 ", "*lambda[1]*"="*.(sstate$lambda1)*
-                 ", "*lambda[2]*"="*.(sstate$lambda2)*", "*p[0]*"="*.(sstate$p0)*")")
-  plot(mpoly %>% st_geometry(), reset=FALSE, xlim=xlim.nydia, ylim=ylim.nydia, main="")
-  draw.state(log(1+sstate$ymat[i,idx]), mpoly %>% filter(idx), 
-             breaks=breaks, add=TRUE)
-  title(ss)
-}
-```
-
-
-
-Autocorrelated function
-
-```{r}
-nstep <- 100
-rho <- 0.9; sigma <- 1
-evec <- rep(0,nstep)
-mu <- 0 ## -5
-evec[1] <- 1
-set.seed(-1)
-for(i in 2:nstep) evec[i] <- mu+rho*(evec[i-1]-mu) + sigma*rnorm(1,0,1)
-plot(1:nstep, expit(evec), type="l")
-```
-
-Binary hidden state
-
-```{r}
-nstep <- 100
-p11 <- 0.95; p22 <- 0.8
-ptvec <- c(p11,p22) # persistence of the two states
-evec <- rep(0,nstep)
-evec[1] <- 1
-set.seed(-6)
-for(i in 2:nstep) {
-  evec[i] <- ifelse(rbinom(1,1,ptvec[evec[i-1]])==1, 
-                                     evec[i-1], # persist
-                                     ifelse(evec[i-1]==1,2,1)) # flip state
-}
-plot(1:nstep, evec, type="s", xlab="Time", ylab="State", axes=FALSE)
-axis(1); axis(2,at=c(1,2),lab=c("Off","On"))
-```
-
-
-```{r}
-rr <- range(log(1+sstate$ymat))
-breaks <- seq(from=rr[1], to=rr[2], length=11)
-for(i in 1:nrow(sstate$ymat)) {
-  draw.state(log(1+sstate$ymat[i,]), mpoly, main=i, breaks=breaks)
-}
-```
-
-
-```{r warning=FALSE}
-nydia_sf <- st_crop(marlpoly_sf.trim, 
-                    xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
-plot(nydia_sf %>% st_geometry())
-text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
-     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
-```
-
-```{r}
-adjlist[[32]]
-adjlist[[200]]
-adjlist[[400]]
-adjlist[[73]]
-adjlist[c(255,404)]
-```
-
-```{r}
-ic <- 32
-pmat[order(pmat[,ic],decreasing=TRUE),ic][1:5]
-ic <- 200
-pmat[order(pmat[,ic],decreasing=TRUE),ic][1:5]
-```
-
-
 
 

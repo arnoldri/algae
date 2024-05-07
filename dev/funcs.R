@@ -28,3 +28,15 @@ binsimfunc <- function(nsim, parlist, fparlist) {
   }
   return(list(qmat=qmat, umat=umat, xmat=xmat, zmat=zmat, ymat=ymat))
 }
+
+# Model with residency
+
+#' Indicator of season (off = 0 or on = 1)
+#' On season is December-July
+#' Off season is August-November
+#'
+#' @export
+seasonfunc <- function(week) {
+  as.numeric(format(week.as.date(week), "%m")) %in% c(12,1,2,3,4,5,6,7)
+}
+

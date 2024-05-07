@@ -5,7 +5,30 @@ date: "2024-04-02"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo=FALSE)
+```
+
+```{r error=FALSE, warning=FALSE, message=FALSE}
+# Packages + set up
+load("opar.Rda")
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(maps)
+library(sf)
+library(geojsonsf)
+library(rmapshaper)
+library(magick)
+library(colorspace)
+library(kableExtra)
+
+library(algae)
+source("funcs.R")
+source("maps.R")
+source("setup.R")
 ```
 
 ## Model involving residency
@@ -36,3 +59,48 @@ Where
  * $\beta$ is the growth/survival parameter
 
 Note that the growth of a bloom depends on the residency
+
+
+## Model
+
+```{r}
+nydia_sf <- st_crop(marlpoly_sf.trim, 
+                    xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
+nydia_sf <- nydia_sf %>% filter(!(CLUSTER_ID%in%c(48,71,162,194,251,258,293,406)))
+idx <- nydia_sf$CLUSTER_ID
+pmat <- conn[[1]][idx,][,idx]
+#dim(pmat) # 17 17
+n <- nrow(pmat)
+nydia_sf$nid <- 1:n
+#hist(apply(conn[[1]],2,sum))
+hist(apply(pmat,2,sum), xlab=expression("Retention "*P[ii]),main="Retention",breaks=11)
+resvec <- diag(pmat)
+```
+
+```{r warning=FALSE}
+plot(nydia_sf %>% st_geometry())
+text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
+     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
+plot(nydia_sf['volume_15'], main="Volume to 15m (cubic km)")
+plot((nydia_sf %>% mutate(residency=resvec[nid]))['residency'], main="1 week water residency")
+```
+
+
+ * $n$ polygons $i=1,\ldots,n$
+ * $V_i$ volume to 15m
+ * $P_{ij}$ = proportion of mass in polygon $j$ moving to polygon $i$ ($\sum_i P_{ij}\leq 1$ for all $j$)
+ * $t$ time in weeks: Week 0 is the week of 1 January 2018
+ * $q_t$ is the seasonal indicator: 1 if the week is in the months of December-July, 0 otherwise
+ 
+```{r}
+w1 <- 2505; week.as.date(2505)
+cbind(1:52, seasonfunc(1:52))
+
+```
+
+
+
+
+
+
+
