@@ -5,7 +5,38 @@ date: "2024-04-02"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo=FALSE)
+```
+
+<!--- For HTML Only --- Equivalent code for .pdf must be included in preamble.tex -->
+`r if (!knitr:::is_latex_output()) '
+$\\DeclareMathOperator*{\\argmin}{argmin}$
+$\\DeclareMathOperator*{\\logit}{logit}$
+$\\newcommand{\\var}{\\mathrm{Var}}$
+$\\newcommand{\\bfa}[2]{{\\rm\\bf #1}[#2]}$
+$\\newcommand{\\rma}[2]{{\\rm     #1}[#2]}$'`
+
+```{r error=FALSE, warning=FALSE, message=FALSE}
+# Packages + set up
+load("opar.Rda")
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(maps)
+library(sf)
+library(geojsonsf)
+library(rmapshaper)
+library(magick)
+library(colorspace)
+library(kableExtra)
+
+library(algae)
+source("funcs.R")
+source("maps.R")
+source("setup.R")
 ```
 
 ## Model involving residency
@@ -36,3 +67,81 @@ Where
  * $\beta$ is the growth/survival parameter
 
 Note that the growth of a bloom depends on the residency
+
+
+## Model
+
+```{r}
+nydia_sf <- st_crop(marlpoly_sf.trim, 
+                    xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
+nydia_sf <- nydia_sf %>% filter(!(CLUSTER_ID%in%c(48,71,162,194,251,258,293,406)))
+idx <- nydia_sf$CLUSTER_ID
+pmat <- conn[[1]][idx,][,idx]
+#dim(pmat) # 17 17
+n <- nrow(pmat)
+nydia_sf$nid <- 1:n
+#hist(apply(conn[[1]],2,sum))
+hist(apply(pmat,2,sum), xlab=expression("Retention "*P[ii]),main="Retention",breaks=11)
+resvec <- diag(pmat)
+```
+
+```{r warning=FALSE}
+plot(nydia_sf %>% st_geometry())
+text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
+     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
+plot(nydia_sf['volume_15'], main="Volume to 15m (cubic km)")
+plot((nydia_sf %>% mutate(residency=resvec[nid]))['residency'], main="1 week water residency")
+```
+
+
+ * $n$ polygons $i=1,\ldots,n$
+ * $V_i$ volume to 15m
+ * $P_{ij}$ = proportion of mass in polygon $j$ moving to polygon $i$ ($\sum_i P_{ij}\leq 1$ for all $j$)
+ * $R_i = P_{ii}$ = proportion of mass remaining resident each week
+ * $t$ time in weeks: Week 0 is the week of 1 January 2018
+ * $q_t$ is the seasonal indicator: 1 if the week is in the months of December-July, 0 otherwise
+ * $\pi_i$ initiation probability in polygon $i$
+   \[
+      \logit(\pi_i) = a_0 + b_0 R_i
+   \]
+ * At time step $t$ the innovation indicator is drawn
+   \[
+      I_{it} \sim \text{Bernoulli}(\pi_iq_t)
+   \]
+ 
+```{r}
+nt <- 5*52 + 1 # number of weeks to simulate
+w1 <- 2505; w2 <- w1 + nt-1
+#week.as.date(2505) # 2018-01-01
+tvec <- w1:w2
+qvec <- seasonfunc(tvec)
+a0 <- -9.0; b0 <- 6.0; pavec <- expit(a0+b0*resvec)
+pimat <- outer(qvec,pavec)
+```
+
+```{r}
+plot(resvec,pavec,xlab="1 week residency",ylab="Initiation probability")
+plot((nydia_sf %>% mutate(pa=pavec[nid]))['pa'], main="Weekly initiation probability")
+```
+
+```{r}
+set.seed(-2)
+imat <- array(rbinom(length(pimat),1,pimat),dim=dim(pimat))
+apply(imat,2,sum)
+plot((nydia_sf %>% mutate(nstart=apply(imat,2,sum)[nid]))['nstart'], main="Number of occurrences")
+text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
+     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
+```
+
+
+```{r}
+plot(week.as.date(tvec), qvec, type="s", xlab="", ylab="Season", axes=FALSE)
+axis.Date(1,format="%b %Y", las=2); axis(2); box()
+```
+
+
+
+
+
+
+
