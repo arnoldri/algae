@@ -1,0 +1,33 @@
+\usepackage{booktabs}
+%\usepackage[utf8]{inputenc}
+%\usepackage{mathptmx}
+%\usepackage{newtxtext,newtxmath}
+\usepackage{xunicode} % Unicode support for LaTeX character names (accents, European chars, etc)
+\usepackage{xltxtra} % Extra customizations for XeLaTeX
+%\setmainfont{Crimson Pro} % set the main body font (\textrm)
+%\setsansfont{Source Sans Pro}
+%\setmonofont{Ubuntu Mono}
+
+\addtolength{\topmargin}{-1cm}
+\addtolength{\textheight}{3cm}
+\addtolength{\oddsidemargin}{-1cm}
+\addtolength{\textwidth}{2cm}
+
+
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\logit}{logit}
+\DeclareMathOperator*{\expit}{expit}
+\newcommand{\var}{\mathrm{Var}}
+\newcommand{\bfa}[2]{{\rm\bf #1}[#2]}
+\newcommand{\rma}[2]{{\rm    #1}[#2]}
+\newcommand{\estm}{\widehat}
+
+% <!--- For HTML Only --- Equivalent code for .pdf must be included in preamble.tex -->
+% `r if (!knitr:::is_latex_output()) '
+% $\\DeclareMathOperator*{\\argmin}{argmin}$
+% $\\DeclareMathOperator*{\\logit}{logit}$
+% $\\DeclareMathOperator*{\\expit}{expit}$
+% $\\newcommand{\\var}{\\mathrm{Var}}$
+% $\\newcommand{\\bfa}[2]{{\\rm\\bf #1}[#2]}$
+% $\\newcommand{\\rma}[2]{{\\rm     #1}[#2]}$
+% $\\newcommand{\\estm}{\\widehat}$'`
