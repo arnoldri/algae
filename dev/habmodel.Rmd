@@ -139,6 +139,13 @@ plot(week.as.date(tvec), qvec, type="s", xlab="", ylab="Season", axes=FALSE)
 axis.Date(1,format="%b %Y", las=2); axis(2); box()
 ```
 
+```{r}
+old <- list.files("C:/Users/richa/AppData/Local/R/win-library/4.3")
+inst <- rownames(installed.packages())
+need <- old[!(old%in%inst)]
+need
+install.packages(need)
+```
 
 
 
