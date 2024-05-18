@@ -73,6 +73,13 @@ for(i in 1:nn) adjmat[i,adjmat[[i]]] <- TRUE
 load("data/conn2018.Rda") # creates conn
 matdates <- as.Date(names(conn),format="%Y%m%d")
 
+# Covariates for the same period
+fname <- "data/Weekly_environmental_variables.xlsx"
+covnames <- excel_sheets(fname)
+covlist <- lapply(1:length(covnames), function(i) as.matrix(read_excel(path=fname,sheet=i,col_names=FALSE)))
+names(covlist) <- covnames
+for(vname in covnames) colnames(covlist[[vname]]) <- matdates
+
 # Events
-load(file="data/event2018.Rda") # creates object: event
-load(file="data/polydat2018.Rda") # creates object: polydat_sf
+load(file="data/event2018.Rda") # creates object: event (indexed: CLUSTER_ID, week) # 6351 rows
+load(file="data/polydat2018.Rda") # creates object: polydat_sf (indexed: CLUSTER_ID) # 408 rows
