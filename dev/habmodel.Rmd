@@ -278,6 +278,26 @@ axis.Date(1,format="%b %Y", las=2); axis(2); box()
 
 
 
+Temperature over time
+
+```{r}
+plot(NA,NA,
+     xlim=range(tempdata$date),
+     ylim=range(tempdata$tmin,na.rm=TRUE),
+     axes=FALSE,xlab="Date",ylab="Daily minimum temperature")
+axis.Date(1); axis(2); box()
+invisible(by(tempdata,tempdata$Station,function(tt) lines(tt$date,tt$tmin)))
+```
+
+```{r}
+plot(NA,NA,
+     xlim=range(event$date),
+     ylim=range(tempdata$tmin,na.rm=TRUE),
+     axes=FALSE,xlab="Date",ylab="Daily minimum temperature")
+axis.Date(1); axis(2); box()
+invisible(by(tempdata,tempdata$Station,function(tt) lines(tt$date,tt$tmin)))
+```
+
 
 
 
