@@ -71,6 +71,8 @@ source("setup.R")
    where $\tau_0$ is the probability of initiation of an epoch favourable to algal blooms 
    ($\tau_0$ is low), and $\tau_1$ is the probability of the persistence of that epoch.
    
+   (Q: do we need spatial autocorrelation as well?  how can we include covariates?)
+   
  * $\pi_{it}$ bloom initiation probability in polygon $i$ at time $t$
    \[
       \logit(\pi_{it}) = \mu_0 + {\bf x}_{it}^T{\beta}_0 + \lambda_0 \logit(R_{it})
@@ -94,7 +96,7 @@ source("setup.R")
                A_{it} + e^{\alpha_{E_t} + {\bf x}_{it}^T{\beta}_2 + \lambda_2 \logit R_{it}}
                         \sum_{j=1}^n P_{ijt} 
                                      e^{{\bf x}_{jt}^T{\beta}_1 + \lambda_1 \logit R_{jt}}
-                                     X_{j,t-1}
+                                     M_{j,t-1}
                \right]
    \]
    where
@@ -107,7 +109,8 @@ source("setup.R")
  * Observation of algal density $Y_{it}$
    \begin{eqnarray*}
      Y_{it} | M_{it} = 0 &\sim& \delta_0\\
-     \log Y_{it} | M_{it}>0, \sigma_\varepsilon^2 &\sim& \text{Normal}(\log M_{it}, \sigma_\varepsilon^2)
+     \log Y_{it} | M_{it}>0, \sigma_\varepsilon^2 &\sim& \text{Normal}(\log (M_{it}/V_i),
+     \sigma_\varepsilon^2)
    \end{eqnarray*}
 
 
