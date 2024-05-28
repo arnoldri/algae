@@ -437,6 +437,14 @@ if(getmatrices) {
 #save.image()
 ```
 
+Covariates
+```{r}
+fname <- "data/Weekly_environmental_variables.xlsx"
+covnames <- excel_sheets(fname)
+covlist <- lapply(1:length(covnames), function(i) read_excel(path=fname,sheet=i,col_names=FALSE))
+names(covlist) <- covnames
+for(vname in covnames) colnames(covlist[[vname]]) <- matdates
+```
 
 ```{r}
 sapply(conn,dim)-408 # matrices are 408 x 408
