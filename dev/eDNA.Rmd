@@ -1,0 +1,29 @@
+---
+title: "eDNA"
+author: "Richard Arnold"
+date: '2024-07-16'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+dispx <- function(x,t, x0=0,t0=0, v=0,a=0.1,m0=1,th=1) {
+  dt <- t-t0
+  dx <- x-x0
+  m0 * 2^(-dt/th) * dnorm(dx, v*dt, sqrt(2*a*dt) )
+}
+```
+
+```{r}
+x0 <- 0; t0 <- 0; v <- 0.5; a <- 0.1; m0 <- 1; th <- 1
+xlim <- c(-3,3)
+nx <- 201
+xvec <- seq(from=xlim[1], to=xlim[2], length=nx)
+yvec <- dispx(xvec, t=0.01, x0,t0, v,a,m0,th)
+plot(xvec, yvec, type="l")
+
+```
+
