@@ -2,28 +2,252 @@
 title: "eDNA"
 author: "Richard Arnold"
 date: '2024-07-16'
-output: html_document
+output: 
+  html_document:
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
-dispx <- function(x,t, x0=0,t0=0, v=0,a=0.1,m0=1,th=1) {
-  dt <- t-t0
-  dx <- x-x0
-  m0 * 2^(-dt/th) * dnorm(dx, v*dt, sqrt(2*a*dt) )
+## Particle dispersal
+
+If there is a mass released at time $t_0$ at location ${\bf x}_0$ then it is transported
+by advection (water flow) and dispersion (turbulence).  
+
+Let $p({\bf x},t | {\bf x}_0, t_0, {\bf v}(), {\bf a}())$ be the proportion of the mass released
+that is found at location ${\bf x}$ at time $t$, given water flow ${\bf v}()$ and dispersion ${\bf a}()$.
+
+A simple model is a simple Gaussian spread in 2D:
+\[
+  \begin{align}
+   p({\bf x},t | {\bf x}_0, t_0, {\bf v}, {\bf a})
+   &= 
+   \frac{1}{2\pi \sqrt{a_xa_y}(t-t_0)}
+   \exp\left(
+      -\frac{\left(x-x_0-v_x(t-t_0)\right)^2}{2a_x(t-t_0)}
+      -\frac{\left(y-y_0-v_y(t-t_0)\right)^2}{2a_y(t-t_0)}
+       \right)\\
+   &= g({\bf x},t-t_0 |{\bf x}_0, {\bf v}, {\bf a})
+  \end{align}
+\]
+with
+\[
+   \int\!\!\int p({\bf x},t|{\bf x}_0,t_0, {\bf v},{\bf a}) \,{\rm d}{\bf x}= 1 
+\]
+for all times $t>t_0$.
+
+
+```{r class.source = 'fold-show'}
+dispfunc <- function(x,y,t, x0,y0,t0, vx,vy, ax,ay) {
+  # this function allows x,y to be vectors of equal length, and t to be of the same length or to be a scalar
+  # it also allows x,y to be scalars and to to be a vector
+  dnorm(x,x0+vx*(t-t0),sqrt(ax*(t-t0))) * dnorm(y,y0+vy*(t-t0),sqrt(ay*(t-t0)))
+}
+denratefunc <- function(x,y,t, x0,y0,t0, vx,vy, ax,ay, n0=1,th=Inf,tm=Inf) {
+  # this version allows x,y to be vectors of equal length
+  if(t<t0 || t-t0>tm) {
+    retval <- rep(0,length(x))
+  } else {
+    retval <- n0*2^{-(t-t0)/th}*dispfunc(x,y,t, x0,y0,t0, vx,vy, ax,ay) 
+  }
+  return(retval)
+}
+denratefunc_integrand <- function(t0, x,y,t, x0,y0, vx,vy, ax,ay, n0=1,th=Inf,tm=Inf) {
+  # this version allows t to be a vector
+  retval <- n0*2^{-(t-t0)/th}*dispfunc(x,y,t, x0,y0,t0, vx,vy, ax,ay) 
+  retval <- retval*ifelse(t<t0 | t-t0>tm, 0, 1)
+  return(retval)
+}
+hfunc <- function(x, y, t, x0, y0, vx, vy, ax, ay, th=Inf, tm=Inf) {
+  integrate(denratefunc_integrand, lower=t-tm, upper=t, 
+            x=x, y=y, t=t, x0=x0, y0=y0, vx=vx, vy=vy, ax=ax, ay=ay, th=th, tm=tm)$value
 }
 ```
 
 ```{r}
-x0 <- 0; t0 <- 0; v <- 0.5; a <- 0.1; m0 <- 1; th <- 1
-xlim <- c(-3,3)
-nx <- 201
-xvec <- seq(from=xlim[1], to=xlim[2], length=nx)
-yvec <- dispx(xvec, t=0.01, x0,t0, v,a,m0,th)
-plot(xvec, yvec, type="l")
+nx <- 101
+ny <- 101
+xmin <- 0; xmax <- 100
+ymin <- 0; ymax <- 100
+xvec <- seq(from=xmin, to=xmax, length=nx)
+yvec <- seq(from=ymin, to=ymax, length=ny)
 
+x0 <- mean(c(xmin,xmax))
+y0 <- mean(c(ymin,ymax))
+t0 <- 0
+vx <- 5; vy <- 1
+ax <- 2^2; ay <- 4^2
 ```
+
+For example here is the spread over time of mass released at ${\bf x}_0=(`r x0`,`r y0`)^T$
+at time $t=`r t0`$ with constant flow field ${\bf v}=(`r vx`,`r vy`)^T$ and
+dispersion ${\bf a}=(`r ax`,`r ay`)^T$
+```{r}
+for(t in 0:10) {
+   ts <- max(t,0.001)
+   amat <- outer(xvec,yvec, dispfunc, t=ts,
+                 x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay)
+   image(xvec, yvec, amat,asp=1, main=bquote(t==.(ts)), xlab="x", ylab="y")
+}
+```
+
+A simple backtracking model simply reverses the flow field.  If we are interested in the likely origin
+of mass observed at location ${\bf x}_1$ at time $t_1$ we can backtrack by reversing ${\bf v}()$.  
+
+We might assume that the likelihood that the observed mass was released at location ${\bf x}$ at time $t<t_1$ 
+is given by
+\[
+   \begin{align}
+   \tilde{p}({\bf x},t | {\bf x}_1,t_1, {\bf v}(), {\bf a}())
+     &= g({\bf x},t_1-t |{\bf x}_1, -{\bf v}(), {\bf a}())\\
+     &= p({\bf x},-t | {\bf x}_1,-t_1, -{\bf v}(), {\bf a}())
+   \end{align}
+\]
+In the simple Gaussian model above this is
+\[
+  \begin{align}
+   \tilde{p}({\bf x},t | {\bf x}_1, t_1, {\bf v}(), {\bf a}())
+   &= 
+   p({\bf x},t_1 | {\bf x}_1, t, -{\bf v}(), {\bf a}())\\
+   &= 
+   p({\bf x},-t | {\bf x}_1, -t_1, -{\bf v}(), {\bf a}())\\
+   &= 
+   g({\bf x},t_1-t | {\bf x}_1, -{\bf v}(), {\bf a}())\\
+   &= 
+   \frac{1}{2\pi\sqrt{a_xa_y}(t_1-t)}
+   \exp\left(
+      -\frac{\left(x-x_1+v_x(t_1-t)\right)^2}{2a_x(t_1-t)}
+      -\frac{\left(y-y_1+v_y(t_1-t)\right)^2}{2a_y(t_1-t)}
+       \right)
+  \end{align}
+\]
+
+```{r}
+x1 <- 100; y1 <- 60
+t1 <- 10
+for(t in 10:0) {
+   ts <- min(t,t1-0.001)
+   amat <- outer(xvec,yvec, dispfunc, t=-ts,
+                 x0=x1,y0=y1,t0=-t1, vx=-vx,vy=-vy, ax=ax,ay=ay)
+   image(xvec, yvec, amat,asp=1, main=bquote(t==.(ts)), xlab="x", ylab="y")
+}
+```
+
+## Continuous release with decay
+
+Assume that at location ${\bf x}_0$ there is a continuous release of mass
+at a rate $N_0$ kg/s.   Further assume that the mass decays at a rate
+\[
+   d(t|T_h,T_m) = 2^{-t/T_h} I(0<t<T_m)
+\]
+where $T_h$ is the decay half life and $T_m$ is the maximum age at which
+all particles have disintegrated.  If we set $\lambda = (1/T_h)\log 2$ then
+\[
+   d(t|T_h,T_m) = e^{-\lambda t} I(0<t<T_m)
+\]
+The steady state mass in the system is then
+\[
+  \begin{align}
+  M_0 &= \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m)\;{\rm d}t_0\\
+      &= N_0 \int_{-\infty}^t e^{-\lambda(t-t_0)} I(t_0>t-T_m)\;{\rm d}t_0\\
+      &= N_0 \int_{t-T_m}^t e^{-\lambda(t-t_0)} \;{\rm d}t_0\\
+      &= N_0 \int_0^{T_m} e^{-\lambda u} \;{\rm d}u\\
+      &= \frac{N_0}{\lambda}\left[1-e^{-\lambda T_m}\right]\\
+      &= \frac{N_0T_h}{\log 2}\left[1-e^{-\lambda T_m}\right]
+  \end{align}
+\]
+
+The mass density transiting per unit time at location ${\bf x}$ at time $t$ 
+from a point source at ${\bf x}_0$ is at time $t_0$ is
+\[
+   \frac{{\rm d}\rho({\bf x},t|N_0,{\bf x}_0,t_0,{\bf v}(),{\bf a}())}{{\rm d}t}
+   = 
+   N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}())
+\]
+
+```{r}
+n0 <- 1
+th <- 2
+tm <- 6
+for(t in 0:10) {
+   ts <- max(t,0.001)
+   amat <- outer(xvec,yvec, denratefunc, t=ts,
+                 x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, n0=n0,th=th,tm=tm)
+   image(xvec, yvec, amat,asp=1, main=bquote(t==.(ts)), xlab="x", ylab="y")
+}
+```
+
+The total (equilibrium) mass density present is
+\[
+  \begin{align}
+   \rho({\bf x},t|N_0,{\bf x}_0,{\bf v}(),{\bf a}())
+   &= \rho({\bf x}|N_0,{\bf x}_0,{\bf v}(),{\bf a}())\\
+   &= \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}())\;{\rm d}t_0\\
+   &= N_0 \int_{t-T_m}^t e^{-\lambda (t-t_0)} g({\bf x},t-t_0|{\bf x}_0,{\bf v}(),{\bf a}())\;{\rm d}t_0\\
+   &= N_0 \int_0^{T_m} e^{-\lambda u} g({\bf x},u|{\bf x}_0,{\bf v}(),{\bf a}())\;{\rm d}u\\
+   &= \frac{N_0}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u}
+      \exp\left(
+         -\frac{\left(x-x_0-v_xu\right)^2}{2a_xu}
+         -\frac{\left(y-y_0-v_yu\right)^2}{2a_yu}       
+         \right)
+   &= N_0 h({\bf x},t|{\bf x}_0,{\bf v}(),{\bf a}())
+  \end{align}
+\]
+where
+\[
+  h({\bf x},t|{\bf x}_0,{\bf v}(),{\bf a}())
+  =
+  \frac{1}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u}
+      \exp\left(
+         -\frac{\left(x-x_0-v_xu\right)^2}{2a_xu}
+         -\frac{\left(y-y_0-v_yu\right)^2}{2a_yu}       
+         \right)
+\]
+
+
+```{r}
+th <- 5
+tm <- 7
+ax <- 2^2; ay <- 5^2
+amat <- array(0,dim=c(nx,ny))
+nc <- 100
+for(i in 1:nc) {
+   t <- i/nc * 10
+   ts <- max(t,0.001)
+   amat <- amat + outer(xvec,yvec, denratefunc, t=ts,
+                        x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, n0=n0,th=th,tm=tm)
+}
+image(xvec, yvec, amat,asp=1, 
+      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), 
+      xlab="x", ylab="y")
+```
+
+function (x, y, t, x0, y0, t0, vx, vy, ax, ay, n0 = 1, th = Inf, tm = Inf) 
+
+```{r}
+hfunc(x=60,y=60,t=3, x0=50,y0=50, vx=vx,vy=vy, ax=ax,ay=ay, th=5,tm=7)
+hfunc(x=60,y=40,t=2, x0=50,y0=50, vx=vx,vy=vy, ax=ax,ay=ay, th=5,tm=7)
+```
+
+```{r}
+th <- 5
+tm <- 7
+ax <- 2^2; ay <- 5^2
+hmat <- array(0,dim=c(nx,ny))
+
+
+nc <- 100
+for(i in 1:nc) {
+   t <- i/nc * 10
+   ts <- max(t,0.001)
+   amat <- amat + outer(xvec,yvec, denratefunc, t=ts,
+                        x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, n0=n0,th=th,tm=tm)
+}
+image(xvec, yvec, amat,asp=1, 
+      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), 
+      xlab="x", ylab="y")
+```
+
 
