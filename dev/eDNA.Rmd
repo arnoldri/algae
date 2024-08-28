@@ -40,30 +40,7 @@ for all times $t>t_0$.
 
 
 ```{r class.source = 'fold-show'}
-dispfunc <- function(x,y,t, x0,y0,t0, vx,vy, ax,ay) {
-  # this function allows x,y to be vectors of equal length, and t to be of the same length or to be a scalar
-  # it also allows x,y to be scalars and to to be a vector
-  dnorm(x,x0+vx*(t-t0),sqrt(ax*(t-t0))) * dnorm(y,y0+vy*(t-t0),sqrt(ay*(t-t0)))
-}
-denratefunc <- function(x,y,t, x0,y0,t0, vx,vy, ax,ay, n0=1,th=Inf,tm=Inf) {
-  # this version allows x,y to be vectors of equal length
-  if(t<t0 || t-t0>tm) {
-    retval <- rep(0,length(x))
-  } else {
-    retval <- n0*2^{-(t-t0)/th}*dispfunc(x,y,t, x0,y0,t0, vx,vy, ax,ay) 
-  }
-  return(retval)
-}
-denratefunc_integrand <- function(t0, x,y,t, x0,y0, vx,vy, ax,ay, n0=1,th=Inf,tm=Inf) {
-  # this version allows t to be a vector
-  retval <- n0*2^{-(t-t0)/th}*dispfunc(x,y,t, x0,y0,t0, vx,vy, ax,ay) 
-  retval <- retval*ifelse(t<t0 | t-t0>tm, 0, 1)
-  return(retval)
-}
-hfunc <- function(x, y, t, x0, y0, vx, vy, ax, ay, th=Inf, tm=Inf) {
-  integrate(denratefunc_integrand, lower=t-tm, upper=t, 
-            x=x, y=y, t=t, x0=x0, y0=y0, vx=vx, vy=vy, ax=ax, ay=ay, th=th, tm=tm)$value
-}
+source("funcs.R")
 ```
 
 ```{r}
@@ -85,11 +62,16 @@ For example here is the spread over time of mass released at ${\bf x}_0=(`r x0`,
 at time $t=`r t0`$ with constant flow field ${\bf v}=(`r vx`,`r vy`)^T$ and
 dispersion ${\bf a}=(`r ax`,`r ay`)^T$
 ```{r}
+colvec <- hcl.colors(12, "YlOrRd", rev = TRUE)
 for(t in 0:10) {
    ts <- max(t,0.001)
    amat <- outer(xvec,yvec, dispfunc, t=ts,
                  x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay)
-   image(xvec, yvec, amat,asp=1, main=bquote(t==.(ts)), xlab="x", ylab="y")
+   #if(t==0) amax <- max(amat)
+   amax <- max(amat)
+   breaks <- seq(from=0, to=amax, length=length(colvec)+1)
+   image(xvec, yvec, amat,asp=1, main=bquote("Forwards:" ~ t==.(ts)), xlab="x", ylab="y",
+         col=colvec, breaks=breaks)
 }
 ```
 
@@ -131,7 +113,11 @@ for(t in 10:0) {
    ts <- min(t,t1-0.001)
    amat <- outer(xvec,yvec, dispfunc, t=-ts,
                  x0=x1,y0=y1,t0=-t1, vx=-vx,vy=-vy, ax=ax,ay=ay)
-   image(xvec, yvec, amat,asp=1, main=bquote(t==.(ts)), xlab="x", ylab="y")
+   #if(t==10) amax <- max(amat)
+   amax <- max(amat)
+   breaks <- seq(from=0, to=amax, length=length(colvec)+1)
+   image(xvec, yvec, amat,asp=1, main=bquote("Backwards: " ~ t==.(ts)), xlab="x", ylab="y",
+         col=colvec, breaks=breaks)
 }
 ```
 
@@ -169,13 +155,18 @@ from a point source at ${\bf x}_0$ is at time $t_0$ is
 
 ```{r}
 n0 <- 1
-th <- 2
+th <- 8
 tm <- 6
 for(t in 0:10) {
    ts <- max(t,0.001)
    amat <- outer(xvec,yvec, denratefunc, t=ts,
                  x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, n0=n0,th=th,tm=tm)
-   image(xvec, yvec, amat,asp=1, main=bquote(t==.(ts)), xlab="x", ylab="y")
+   #if(t==0) amax <- max(amat)
+   amax <- max(amat)
+   breaks <- seq(from=0, to=amax, length=length(colvec)+1)
+   image(xvec, yvec, amat,asp=1, main=bquote("Forwards with decay:" ~ t==.(ts)), xlab="x", ylab="y",
+         col=colvec, breaks=breaks)
+   mtext(bquote("sum:"~.(sum(amat))), side=3, adj=1, cex=0.8)
 }
 ```
 
@@ -191,13 +182,13 @@ The total (equilibrium) mass density present is
       \exp\left(
          -\frac{\left(x-x_0-v_xu\right)^2}{2a_xu}
          -\frac{\left(y-y_0-v_yu\right)^2}{2a_yu}       
-         \right)
-   &= N_0 h({\bf x},t|{\bf x}_0,{\bf v}(),{\bf a}())
+         \right)\\
+   &= N_0 h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}())
   \end{align}
 \]
 where
 \[
-  h({\bf x},t|{\bf x}_0,{\bf v}(),{\bf a}())
+  h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}())
   =
   \frac{1}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u}
       \exp\left(
@@ -224,11 +215,22 @@ image(xvec, yvec, amat,asp=1,
       xlab="x", ylab="y")
 ```
 
-function (x, y, t, x0, y0, t0, vx, vy, ax, ay, n0 = 1, th = Inf, tm = Inf) 
 
 ```{r}
-hfunc(x=60,y=60,t=3, x0=50,y0=50, vx=vx,vy=vy, ax=ax,ay=ay, th=5,tm=7)
-hfunc(x=60,y=40,t=2, x0=50,y0=50, vx=vx,vy=vy, ax=ax,ay=ay, th=5,tm=7)
+th <- 9
+tm <- 7
+ax <- 2^2; ay <- 5^2
+eps <- 0.001
+amat <- n0*outer(xvec,yvec, hfunc,
+                 x0=x0-eps,y0=y0-eps, vx=vx,vy=vy, ax=ax,ay=ay, th=th,tm=tm)
+image(xvec, yvec, amat, asp=1, 
+      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), xlab="x", ylab="y")
+```
+
+
+```{r}
+hfunc(x=60,y=60, x0=50,y0=50, vx=vx,vy=vy, ax=ax,ay=ay, th=5,tm=7)
+hfunc(x=60,y=40, x0=50,y0=50, vx=vx,vy=vy, ax=ax,ay=ay, th=5,tm=7)
 ```
 
 ```{r}
@@ -250,4 +252,6 @@ image(xvec, yvec, amat,asp=1,
       xlab="x", ylab="y")
 ```
 
+```{r}
+```
 
