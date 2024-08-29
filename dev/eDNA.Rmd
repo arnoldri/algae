@@ -2,7 +2,8 @@
 title: "eDNA"
 author: "Richard Arnold"
 date: '2024-07-16'
-output: 
+output:
+  pdf_document: default
   html_document:
     code_folding: hide
 ---
@@ -16,25 +17,26 @@ knitr::opts_chunk$set(echo = TRUE)
 If there is a mass released at time $t_0$ at location ${\bf x}_0$ then it is transported
 by advection (water flow) and dispersion (turbulence).  
 
-Let $p({\bf x},t | {\bf x}_0, t_0, {\bf v}(), {\bf a}())$ be the proportion of the mass released
+Let $p({\bf x},t | {\bf x}_0, t_0, {\bf v}(), {\bf a}(), \Psi)$ be the proportion of the mass released
 that is found at location ${\bf x}$ at time $t$, given water flow ${\bf v}()$ and dispersion ${\bf a}()$.
+$\Psi$ is a set of additional parameters controlling the flow/dispersion model.
 
 A simple model is a simple Gaussian spread in 2D:
-\[
-  \begin{align}
-   p({\bf x},t | {\bf x}_0, t_0, {\bf v}, {\bf a})
-   &= 
-   \frac{1}{2\pi \sqrt{a_xa_y}(t-t_0)}
+\begin{eqnarray}
+   p({\bf x},t | {\bf x}_0, t_0, {\bf v}, {\bf a}, \Psi)
+   &=& 
+   \frac{I(t\geq t_0)}{2\pi \sqrt{a_xa_y}(t-t_0+t_\varepsilon)}
    \exp\left(
-      -\frac{\left(x-x_0-v_x(t-t_0)\right)^2}{2a_x(t-t_0)}
-      -\frac{\left(y-y_0-v_y(t-t_0)\right)^2}{2a_y(t-t_0)}
+      -\frac{\left(x-x_0-v_x(t-t_0)\right)^2}{2a_x(t-t_0+t_\varepsilon)}
+      -\frac{\left(y-y_0-v_y(t-t_0)\right)^2}{2a_y(t-t_0+t_\varepsilon)}
        \right)\\
-   &= g({\bf x},t-t_0 |{\bf x}_0, {\bf v}, {\bf a})
-  \end{align}
-\]
-with
+   &=& g({\bf x},t-t_0 |{\bf x}_0, {\bf v}, {\bf a}, \Psi)
+\end{eqnarray}
+where a small positive temporal offset $\Psi=\{t_\varepsilon\}$ is added to avoid a singularity at $t=t_0$.
+
+We have 
 \[
-   \int\!\!\int p({\bf x},t|{\bf x}_0,t_0, {\bf v},{\bf a}) \,{\rm d}{\bf x}= 1 
+   \int\!\!\int p({\bf x},t|{\bf x}_0,t_0, {\bf v},{\bf a}, \Psi) \,{\rm d}{\bf x}= 1 
 \]
 for all times $t>t_0$.
 
@@ -56,22 +58,26 @@ y0 <- mean(c(ymin,ymax))
 t0 <- 0
 vx <- 5; vy <- 1
 ax <- 2^2; ay <- 4^2
+teps <- 0.01
 ```
 
 For example here is the spread over time of mass released at ${\bf x}_0=(`r x0`,`r y0`)^T$
 at time $t=`r t0`$ with constant flow field ${\bf v}=(`r vx`,`r vy`)^T$ and
-dispersion ${\bf a}=(`r ax`,`r ay`)^T$
+dispersion ${\bf a}=(`r ax`,`r ay`)^T$ and with $t_\varepsilon=`r teps`$.
 ```{r}
+par(mfrow=c(3,4))
+par(mar=0.1*c(1,1,1,1))
 colvec <- hcl.colors(12, "YlOrRd", rev = TRUE)
+colvec <- hcl.colors(12, "YlGnBu")#, rev = TRUE)
 for(t in 0:10) {
-   ts <- max(t,0.001)
-   amat <- outer(xvec,yvec, dispfunc, t=ts,
-                 x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay)
+   amat <- outer(xvec,yvec, dispfunc, t=t,
+                 x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps)
    #if(t==0) amax <- max(amat)
    amax <- max(amat)
    breaks <- seq(from=0, to=amax, length=length(colvec)+1)
-   image(xvec, yvec, amat,asp=1, main=bquote("Forwards:" ~ t==.(ts)), xlab="x", ylab="y",
-         col=colvec, breaks=breaks)
+   image(xvec, yvec, amat, asp=1, col=colvec, breaks=breaks, axes=FALSE)
+   #image(xvec, yvec, amat,asp=1, main=bquote("Forwards:" ~ t==.(t)), xlab="x", ylab="y",
+   #      col=colvec, breaks=breaks)
 }
 ```
 
@@ -80,44 +86,42 @@ of mass observed at location ${\bf x}_1$ at time $t_1$ we can backtrack by rever
 
 We might assume that the likelihood that the observed mass was released at location ${\bf x}$ at time $t<t_1$ 
 is given by
-\[
-   \begin{align}
-   \tilde{p}({\bf x},t | {\bf x}_1,t_1, {\bf v}(), {\bf a}())
-     &= g({\bf x},t_1-t |{\bf x}_1, -{\bf v}(), {\bf a}())\\
-     &= p({\bf x},-t | {\bf x}_1,-t_1, -{\bf v}(), {\bf a}())
-   \end{align}
-\]
+\begin{eqnarray}
+   \tilde{p}({\bf x},t | {\bf x}_1,t_1, {\bf v}(), {\bf a}(), \Psi)
+     &=& g({\bf x},t_1-t |{\bf x}_1, -{\bf v}(), {\bf a}(), \Psi)\\
+     &=& p({\bf x},-t | {\bf x}_1,-t_1, -{\bf v}(), {\bf a}(), \Psi)
+\end{eqnarray}
 In the simple Gaussian model above this is
-\[
-  \begin{align}
-   \tilde{p}({\bf x},t | {\bf x}_1, t_1, {\bf v}(), {\bf a}())
-   &= 
-   p({\bf x},t_1 | {\bf x}_1, t, -{\bf v}(), {\bf a}())\\
-   &= 
-   p({\bf x},-t | {\bf x}_1, -t_1, -{\bf v}(), {\bf a}())\\
-   &= 
-   g({\bf x},t_1-t | {\bf x}_1, -{\bf v}(), {\bf a}())\\
-   &= 
-   \frac{1}{2\pi\sqrt{a_xa_y}(t_1-t)}
+\begin{eqnarray}
+   &&\mbox{}\hspace{-2cm}\tilde{p}({\bf x},t | {\bf x}_1, t_1, {\bf v}(), {\bf a}(), \Psi)\\
+   &=& 
+   p({\bf x},t_1 | {\bf x}_1, t, -{\bf v}(), {\bf a}(), \Psi)\\
+   &=& 
+   p({\bf x},-t | {\bf x}_1, -t_1, -{\bf v}(), {\bf a}(), \Psi)\\
+   &=& 
+   g({\bf x},t_1-t | {\bf x}_1, -{\bf v}(), {\bf a}(), \Psi)\\
+   &=& 
+   \frac{I(t\leq t_1)}{2\pi\sqrt{a_xa_y}(t_1-t+t_\varepsilon)}
    \exp\left(
-      -\frac{\left(x-x_1+v_x(t_1-t)\right)^2}{2a_x(t_1-t)}
-      -\frac{\left(y-y_1+v_y(t_1-t)\right)^2}{2a_y(t_1-t)}
+      -\frac{\left(x-x_1+v_x(t_1-t)\right)^2}{2a_x(t_1-t+t_\varepsilon)}
+      -\frac{\left(y-y_1+v_y(t_1-t)\right)^2}{2a_y(t_1-t+t_\varepsilon)}
        \right)
-  \end{align}
-\]
+\end{eqnarray}
 
 ```{r}
+par(mfrow=c(3,4))
+par(mar=0.1*c(1,1,1,1))
 x1 <- 100; y1 <- 60
 t1 <- 10
 for(t in 10:0) {
-   ts <- min(t,t1-0.001)
-   amat <- outer(xvec,yvec, dispfunc, t=-ts,
-                 x0=x1,y0=y1,t0=-t1, vx=-vx,vy=-vy, ax=ax,ay=ay)
+   amat <- outer(xvec,yvec, dispfunc, t=-t,
+                 x0=x1,y0=y1,t0=-t1, vx=-vx,vy=-vy, ax=ax,ay=ay, teps=teps)
    #if(t==10) amax <- max(amat)
    amax <- max(amat)
    breaks <- seq(from=0, to=amax, length=length(colvec)+1)
-   image(xvec, yvec, amat,asp=1, main=bquote("Backwards: " ~ t==.(ts)), xlab="x", ylab="y",
-         col=colvec, breaks=breaks)
+   image(xvec, yvec, amat,asp=1, col=colvec, breaks=breaks, axes=FALSE)
+   #image(xvec, yvec, amat,asp=1, main=bquote("Backwards: " ~ t==.(t)), xlab="x", ylab="y",
+   #      col=colvec, breaks=breaks)
 }
 ```
 
@@ -126,74 +130,77 @@ for(t in 10:0) {
 Assume that at location ${\bf x}_0$ there is a continuous release of mass
 at a rate $N_0$ kg/s.   Further assume that the mass decays at a rate
 \[
-   d(t|T_h,T_m) = 2^{-t/T_h} I(0<t<T_m)
+   d(t|T_h,T_m) = 2^{-t/T_h} I(0\leq t\leq T_m)
 \]
 where $T_h$ is the decay half life and $T_m$ is the maximum age at which
 all particles have disintegrated.  If we set $\lambda = (1/T_h)\log 2$ then
 \[
-   d(t|T_h,T_m) = e^{-\lambda t} I(0<t<T_m)
+   d(t|T_h,T_m) = e^{-\lambda t} I(0\leq t\leq T_m)
 \]
 The steady state mass in the system is then
-\[
-  \begin{align}
-  M_0 &= \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m)\;{\rm d}t_0\\
-      &= N_0 \int_{-\infty}^t e^{-\lambda(t-t_0)} I(t_0>t-T_m)\;{\rm d}t_0\\
-      &= N_0 \int_{t-T_m}^t e^{-\lambda(t-t_0)} \;{\rm d}t_0\\
-      &= N_0 \int_0^{T_m} e^{-\lambda u} \;{\rm d}u\\
-      &= \frac{N_0}{\lambda}\left[1-e^{-\lambda T_m}\right]\\
-      &= \frac{N_0T_h}{\log 2}\left[1-e^{-\lambda T_m}\right]
-  \end{align}
-\]
+\begin{eqnarray}
+  M_0 &=& \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m)\;{\rm d}t_0\\
+      &=& N_0 \int_{-\infty}^t e^{-\lambda(t-t_0)} I(t_0>t-T_m)\;{\rm d}t_0\\
+      &=& N_0 \int_{t-T_m}^t e^{-\lambda(t-t_0)} \;{\rm d}t_0\\
+      &=& N_0 \int_0^{T_m} e^{-\lambda u} \;{\rm d}u\\
+      &=& \frac{N_0}{\lambda}\left[1-e^{-\lambda T_m}\right]\\
+      &=&\frac{N_0T_h}{\log 2}\left[1-e^{-\lambda T_m}\right]
+\end{eqnarray}
 
 The mass density transiting per unit time at location ${\bf x}$ at time $t$ 
 from a point source at ${\bf x}_0$ is at time $t_0$ is
 \[
-   \frac{{\rm d}\rho({\bf x},t|N_0,{\bf x}_0,t_0,{\bf v}(),{\bf a}())}{{\rm d}t}
+   \frac{{\rm d}\rho({\bf x},t|N_0,{\bf x}_0,t_0,{\bf v}(),{\bf a}(), \Psi)}{{\rm d}t}
    = 
-   N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}())
+   N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}(),\Psi)
 \]
 
 ```{r}
+par(mfrow=c(3,4))
+par(mar=0.1*c(1,1,1,1))
 n0 <- 1
-th <- 8
-tm <- 6
+th <- 5
+tm <- 7
 for(t in 0:10) {
-   ts <- max(t,0.001)
-   amat <- outer(xvec,yvec, denratefunc, t=ts,
-                 x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, n0=n0,th=th,tm=tm)
-   #if(t==0) amax <- max(amat)
+   amat <- outer(xvec,yvec, denratefunc, t=t,
+                 x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, n0=n0,th=th,tm=tm)
+   #amat <- log(1+amat)
+   #if(t==0) {
+   #   amin <- min(amat)
+   #   amax <- max(amat)
+   #}
+   amin <- min(amat)
    amax <- max(amat)
-   breaks <- seq(from=0, to=amax, length=length(colvec)+1)
-   image(xvec, yvec, amat,asp=1, main=bquote("Forwards with decay:" ~ t==.(ts)), xlab="x", ylab="y",
-         col=colvec, breaks=breaks)
-   mtext(bquote("sum:"~.(sum(amat))), side=3, adj=1, cex=0.8)
+   breaks <- seq(from=amin, to=amax, length=length(colvec)+1)
+   image(xvec, yvec, amat, asp=1, col=colvec, breaks=breaks, axes=FALSE)
+   #image(xvec, yvec, amat,asp=1, main=bquote("Forwards with decay:" ~ t==.(t)), xlab="x", ylab="y",
+   #      col=colvec, breaks=breaks)
+   mtext(bquote("sum:"~.(sum(amat))~"max:"~.(max(amat))), side=3, adj=1, cex=0.6, line=-1, col="white")
 }
 ```
 
 The total (equilibrium) mass density present is
-\[
-  \begin{align}
-   \rho({\bf x},t|N_0,{\bf x}_0,{\bf v}(),{\bf a}())
-   &= \rho({\bf x}|N_0,{\bf x}_0,{\bf v}(),{\bf a}())\\
-   &= \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}())\;{\rm d}t_0\\
-   &= N_0 \int_{t-T_m}^t e^{-\lambda (t-t_0)} g({\bf x},t-t_0|{\bf x}_0,{\bf v}(),{\bf a}())\;{\rm d}t_0\\
-   &= N_0 \int_0^{T_m} e^{-\lambda u} g({\bf x},u|{\bf x}_0,{\bf v}(),{\bf a}())\;{\rm d}u\\
-   &= \frac{N_0}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u}
+\begin{eqnarray}
+   &&\mbox{}\hspace{-2cm}\rho({\bf x},t|N_0,{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\\
+   &=& \rho({\bf x}|N_0,{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\\
+   &=& \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}t_0\\
+   &=& N_0 \int_{t-T_m}^t e^{-\lambda (t-t_0)} g({\bf x},t-t_0|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}t_0\\
+   &=& N_0 \int_0^{T_m} e^{-\lambda u} g({\bf x},u|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}u\\
+   &=& \frac{N_0}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u+t_\varepsilon}
       \exp\left(
-         -\frac{\left(x-x_0-v_xu\right)^2}{2a_xu}
-         -\frac{\left(y-y_0-v_yu\right)^2}{2a_yu}       
+         -\frac{\left(x-x_0-v_xu\right)^2}{2a_x(u+t_\varepsilon)}
+         -\frac{\left(y-y_0-v_yu\right)^2}{2a_y(u+t_\varepsilon)}       
          \right)\\
-   &= N_0 h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}())
-  \end{align}
-\]
+   &=& N_0 h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)
+\end{eqnarray}
 where
 \[
-  h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}())
+  h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)
   =
-  \frac{1}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u}
+  \frac{1}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u+t_\varepsilon}
       \exp\left(
-         -\frac{\left(x-x_0-v_xu\right)^2}{2a_xu}
-         -\frac{\left(y-y_0-v_yu\right)^2}{2a_yu}       
+         -\frac{\left(x-x_0-v_xu\right)^2}{2a_x(u+t_\varepsilon)}
+         -\frac{\left(y-y_0-v_yu\right)^2}{2a_y(u+,t_\varepsilon)}       
          \right)
 \]
 
@@ -206,52 +213,48 @@ amat <- array(0,dim=c(nx,ny))
 nc <- 100
 for(i in 1:nc) {
    t <- i/nc * 10
-   ts <- max(t,0.001)
-   amat <- amat + outer(xvec,yvec, denratefunc, t=ts,
-                        x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, n0=n0,th=th,tm=tm)
+   amat <- amat + outer(xvec,yvec, denratefunc, t=t,
+                        x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, n0=n0,th=th,tm=tm)
 }
 image(xvec, yvec, amat,asp=1, 
       main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), 
-      xlab="x", ylab="y")
+      xlab="x", ylab="y",col=colvec)
 ```
 
 
 ```{r}
-th <- 9
+th <- 5
 tm <- 7
 ax <- 2^2; ay <- 5^2
-eps <- 0.001
 amat <- n0*outer(xvec,yvec, hfunc,
-                 x0=x0-eps,y0=y0-eps, vx=vx,vy=vy, ax=ax,ay=ay, th=th,tm=tm)
+                 x0=x0,y0=y0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, th=th,tm=tm)
 image(xvec, yvec, amat, asp=1, 
-      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), xlab="x", ylab="y")
-```
-
-
-```{r}
-hfunc(x=60,y=60, x0=50,y0=50, vx=vx,vy=vy, ax=ax,ay=ay, th=5,tm=7)
-hfunc(x=60,y=40, x0=50,y0=50, vx=vx,vy=vy, ax=ax,ay=ay, th=5,tm=7)
+      main=bquote(h(x*"|"*x[0])*":" ~ x[0]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), xlab="x", ylab="y",col=colvec)
 ```
 
 ```{r}
 th <- 5
 tm <- 7
 ax <- 2^2; ay <- 5^2
-hmat <- array(0,dim=c(nx,ny))
-
-
-nc <- 100
-for(i in 1:nc) {
-   t <- i/nc * 10
-   ts <- max(t,0.001)
-   amat <- amat + outer(xvec,yvec, denratefunc, t=ts,
-                        x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, n0=n0,th=th,tm=tm)
-}
-image(xvec, yvec, amat,asp=1, 
-      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), 
-      xlab="x", ylab="y")
+x1 <- 50; y1 <- 50
+rho1 <- 1; mu <- 1
+amat <- outer(xvec,yvec, function(x0vec,y0vec) {
+                    apply(cbind(x0vec,y0vec),1,function(x0y0) {
+                          hfunc(x=x1,y=y1,x0=x0y0[1],y0=x0y0[2],
+                          vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, th=th,tm=tm)
+                    })
+                 })
+dim(amat) <- c(length(xvec),length(yvec))
+image(xvec, yvec, amat, asp=1, 
+      main=bquote(h(x[1]*"|"*x[0])*":" ~ x[1]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
 ```
 
 ```{r}
+qmat <- exp(-max(amat)/3.0/amat) * (1/amat)
+image(xvec, yvec, qmat, asp=1, 
+      main=bquote(p(x[0]*"|"*x[1])*":" ~ x[1]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
 ```
+
 

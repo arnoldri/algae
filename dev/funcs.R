@@ -1,32 +1,33 @@
 #########################################################################
 # eDNA backtracking functions
-dispfunc <- function(x,y,t, x0,y0,t0, vx,vy, ax,ay) {
+dispfunc <- function(x,y,t, x0,y0,t0, vx,vy, ax,ay, teps) {
   # this function allows x,y to be vectors of equal length, and t to be of the same length or to be a scalar
   # it also allows x,y to be scalars and t to be a vector
   # don't mix these!
-  dnorm(x,x0+vx*(t-t0),sqrt(ax*(t-t0))) * dnorm(y,y0+vy*(t-t0),sqrt(ay*(t-t0)))
+  retval <- dnorm(x,x0+vx*(t-t0),sqrt(ax*(t-t0+teps))) * dnorm(y,y0+vy*(t-t0),sqrt(ay*(t-t0+teps)))
+  return(retval)
 }
-denratefunc <- function(x,y,t, x0,y0,t0, vx,vy, ax,ay, n0=1,th=Inf,tm=Inf) {
+denratefunc <- function(x,y,t, x0,y0,t0, vx,vy, ax,ay,teps, n0=1,th=Inf,tm=Inf) {
   # this version allows x,y to be vectors of equal length
   # t must be a scalar
   if(t<t0 || t-t0>tm) {
     retval <- rep(0,length(x))
   } else {
-    retval <- n0*2^(-(t-t0)/th)*dispfunc(x,y,t, x0,y0,t0, vx,vy, ax,ay)
+    retval <- n0*2^(-(t-t0)/th)*dispfunc(x,y,t, x0,y0,t0, vx,vy, ax,ay, teps)
   }
   return(retval)
 }
-hfunc <- function(x, y, x0, y0, vx, vy, ax, ay, th=Inf, tm=Inf) {
+hfunc <- function(x, y, x0, y0, vx, vy, ax, ay, teps, th=Inf, tm=Inf) {
   apply(matrix(c(x,y),ncol=2), 1, function(xy) {
     integrate(denratefunc_integrand,
               lower=0, upper=tm,
               x=xy[1], y=xy[2], t=tm,
-              x0=x0, y0=y0, vx=vx, vy=vy, ax=ax, ay=ay, th=th, tm=tm)$value
+              x0=x0, y0=y0, vx=vx, vy=vy, ax=ax, ay=ay, teps=teps, th=th, tm=tm)$value
   })
 }
-denratefunc_integrand <- function(t0, x,y,t, x0,y0, vx,vy, ax,ay, n0=1,th=Inf,tm=Inf) {
+denratefunc_integrand <- function(t0, x,y,t, x0,y0, vx,vy, ax,ay, teps, n0=1,th=Inf,tm=Inf) {
   # this version allows t0 to be a vector, (x,y,t) must be scalars
-  retval <- n0*2^{-(t-t0)/th}*dispfunc(x,y,t, x0,y0,t0, vx,vy, ax,ay)
+  retval <- n0*2^{-(t-t0)/th}*dispfunc(x,y,t, x0,y0,t0, vx,vy, ax,ay, teps)
   retval <- retval*ifelse(t<t0 | t-t0>tm, 0, 1)
   return(retval)
 }
