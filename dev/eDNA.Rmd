@@ -3,9 +3,9 @@ title: "eDNA"
 author: "Richard Arnold"
 date: '2024-07-16'
 output:
-  pdf_document: default
   html_document:
     code_folding: hide
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -25,7 +25,7 @@ A simple model is a simple Gaussian spread in 2D:
 \begin{eqnarray}
    p({\bf x},t | {\bf x}_0, t_0, {\bf v}, {\bf a}, \Psi)
    &=& 
-   \frac{I(t\geq t_0)}{2\pi \sqrt{a_xa_y}(t-t_0+t_\varepsilon)}
+   \frac{I(t-t_0\geq 0)}{2\pi \sqrt{a_xa_y}(t-t_0+t_\varepsilon)}
    \exp\left(
       -\frac{\left(x-x_0-v_x(t-t_0)\right)^2}{2a_x(t-t_0+t_\varepsilon)}
       -\frac{\left(y-y_0-v_y(t-t_0)\right)^2}{2a_y(t-t_0+t_\varepsilon)}
@@ -40,6 +40,13 @@ We have
 \]
 for all times $t>t_0$.
 
+Note that $g()$ has a symmetry in which we can interchange ${\bf x}$ and ${\bf x}_0$ and at the
+same time reverse the velocity field, so for any time interval $u\geq 0$:
+\begin{equation}
+   g({\bf x},u|{\bf x}_0,{\bf v},{\bf a},\Psi)
+   = 
+   g({\bf x}_0,u|{\bf x},-{\bf v},{\bf a},\Psi)
+\end{equation}
 
 ```{r class.source = 'fold-show'}
 source("funcs.R")
@@ -64,6 +71,10 @@ teps <- 0.01
 For example here is the spread over time of mass released at ${\bf x}_0=(`r x0`,`r y0`)^T$
 at time $t=`r t0`$ with constant flow field ${\bf v}=(`r vx`,`r vy`)^T$ and
 dispersion ${\bf a}=(`r ax`,`r ay`)^T$ and with $t_\varepsilon=`r teps`$.
+
+**Forward tracking:** $p({\bf x},t|{\bf x}_0,t_0, {\bf v}(), {\bf a}(), \Psi)$: 
+$t_0, \ldots, t_0+10$ 
+(no decay)
 ```{r}
 par(mfrow=c(3,4))
 par(mar=0.1*c(1,1,1,1))
@@ -101,13 +112,15 @@ In the simple Gaussian model above this is
    &=& 
    g({\bf x},t_1-t | {\bf x}_1, -{\bf v}(), {\bf a}(), \Psi)\\
    &=& 
-   \frac{I(t\leq t_1)}{2\pi\sqrt{a_xa_y}(t_1-t+t_\varepsilon)}
+   \frac{I(t_1-t\geq 0)}{2\pi\sqrt{a_xa_y}(t_1-t+t_\varepsilon)}
    \exp\left(
       -\frac{\left(x-x_1+v_x(t_1-t)\right)^2}{2a_x(t_1-t+t_\varepsilon)}
       -\frac{\left(y-y_1+v_y(t_1-t)\right)^2}{2a_y(t_1-t+t_\varepsilon)}
        \right)
 \end{eqnarray}
 
+**Back tracking:** $\tilde{p}({\bf x},t|{\bf x}_1,t_1, {\bf v}(), {\bf a}(), \Psi) = p({\bf x},-t|{\bf x}_1,-t_1, -{\bf v}(), {\bf a}(), \Psi)$: $t_1, \ldots, t_1-10$ 
+(no decay)
 ```{r}
 par(mfrow=c(3,4))
 par(mar=0.1*c(1,1,1,1))
@@ -148,13 +161,15 @@ The steady state mass in the system is then
 \end{eqnarray}
 
 The mass density transiting per unit time at location ${\bf x}$ at time $t$ 
-from a point source at ${\bf x}_0$ is at time $t_0$ is
+emitted from a point source at ${\bf x}_0$ at time $t_0$ is
 \[
    \frac{{\rm d}\rho({\bf x},t|N_0,{\bf x}_0,t_0,{\bf v}(),{\bf a}(), \Psi)}{{\rm d}t}
    = 
    N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}(),\Psi)
 \]
 
+**Density rate** ${\rm d}\rho({\bf x},t|N_0,{\bf x}_0,t_0,{\bf v}(),{\bf a}(), \Psi)/{\rm d}t$, 
+$t=t_0, \ldots, t_0+10$ (with decay).  (Scales differ between panels: note max and sum values.)
 ```{r}
 par(mfrow=c(3,4))
 par(mar=0.1*c(1,1,1,1))
@@ -186,14 +201,28 @@ The total (equilibrium) mass density present is
    &=& \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}t_0\\
    &=& N_0 \int_{t-T_m}^t e^{-\lambda (t-t_0)} g({\bf x},t-t_0|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}t_0\\
    &=& N_0 \int_0^{T_m} e^{-\lambda u} g({\bf x},u|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}u\\
-   &=& \frac{N_0}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u+t_\varepsilon}
-      \exp\left(
-         -\frac{\left(x-x_0-v_xu\right)^2}{2a_x(u+t_\varepsilon)}
-         -\frac{\left(y-y_0-v_yu\right)^2}{2a_y(u+t_\varepsilon)}       
-         \right)\\
    &=& N_0 h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)
 \end{eqnarray}
 where
+\[
+  h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)
+  =
+  \int_0^{T_m} e^{-\lambda u} g({\bf x},u|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}u
+\]
+The function $h()$ retains the same symmetry as $g()$, so since
+\[
+  g({\bf x},u|{\bf x}_0,{\bf v},{\bf a},\Psi)
+  = 
+  g({\bf x}_0,u|{\bf x},-{\bf v},{\bf a},\Psi)
+\]
+it follows that 
+\[
+  h({\bf x},u|{\bf x}_0,{\bf v},{\bf a},\Psi)
+  = 
+  h({\bf x}_0,u|{\bf x},-{\bf v},{\bf a},\Psi)
+\]
+
+In the Gaussian dispersal example
 \[
   h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)
   =
@@ -204,24 +233,24 @@ where
          \right)
 \]
 
-
 ```{r}
-th <- 5
-tm <- 7
-ax <- 2^2; ay <- 5^2
-amat <- array(0,dim=c(nx,ny))
-nc <- 100
-for(i in 1:nc) {
-   t <- i/nc * 10
-   amat <- amat + outer(xvec,yvec, denratefunc, t=t,
-                        x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, n0=n0,th=th,tm=tm)
-}
-image(xvec, yvec, amat,asp=1, 
-      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), 
-      xlab="x", ylab="y",col=colvec)
+#th <- 5
+#tm <- 7
+#ax <- 2^2; ay <- 5^2
+#amat <- array(0,dim=c(nx,ny))
+#nc <- 100
+#for(i in 1:nc) {
+#   t <- i/nc * 10
+#   amat <- amat + outer(xvec,yvec, denratefunc, t=t,
+#                        x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, n0=n0,th=th,tm=tm)
+#}
+#image(xvec, yvec, amat,asp=1, 
+#      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), 
+#      xlab="x", ylab="y",col=colvec)
 ```
 
-
+**Equilibrium Density**: 
+$\rho({\bf x}|N_0,{\bf x}_0,{\bf v},{\bf a},\Psi)=N_0h({\bf x}|{\bf x}_0,{\bf v},{\bf a},\Psi)$
 ```{r}
 th <- 5
 tm <- 7
@@ -232,6 +261,21 @@ image(xvec, yvec, amat, asp=1,
       main=bquote(h(x*"|"*x[0])*":" ~ x[0]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), xlab="x", ylab="y",col=colvec)
 ```
 
+The above figure plots, for a continuous fixed source of rate $N_0$ at location ${\bf x}_0$, 
+the equilibrium density at all locations ${\bf x}$: $N_0 h({\bf x}|{\bf x}_0)$.
+
+Now plot at each ${\bf x}_0$ the equilibrium density at ${\bf x}_1$ (in the centre of the diagram)
+that would result from a continuous source at ${\bf x}_0$.  i.e. $N_0 h({\bf x}_1|{\bf x_0})$
+\begin{eqnarray*}
+   N_0 \tilde{h}({\bf x}_0 | {\bf x}_1, {\bf v}, {\bf a}, \Psi) 
+    &=& N_0 h({\bf x}_1|{\bf x}_0, {\bf v}, {\bf a}, \Psi)\\
+    &=& N_0 h({\bf x}_0|{\bf x}_1, -{\bf v}, {\bf a}, \Psi)
+\end{eqnarray*}
+
+
+$N_0 \tilde{h}({\bf x}_0|{\bf x}_!, {\bf v}, {\bf a}, \Psi) 
+  = N_0 h({\bf x}_1|{\bf x}_0, {\bf v}, {\bf a}, \Psi) 
+  = N_0 h({\bf x}_0|{\bf x}_1, -{\bf v}, {\bf a}, \Psi)$
 ```{r}
 th <- 5
 tm <- 7
@@ -250,11 +294,114 @@ image(xvec, yvec, amat, asp=1,
       xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
 ```
 
+(Computing this the other way using the symmetry of h())
 ```{r}
+th <- 5
+tm <- 7
+ax <- 2^2; ay <- 5^2
+x1 <- 50; y1 <- 50
+rho1 <- 1; mu <- 1
+amat <- n0*outer(xvec,yvec, hfunc,
+                 x0=x1,y0=y1, vx=-vx,vy=-vy, ax=ax,ay=ay, teps=teps, th=th,tm=tm)
+image(xvec, yvec, amat, asp=1, 
+      main=bquote(h(x[1]*"|"*x[0])*":" ~ x[1]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
+```
+
+## Probabilistic Inversion
+
+Now assume that at some location ${\bf x}_1$ we observe a density $\rho_1$, and that 
+this in an observation made with error:
+\[
+   \rho_1 | \rho_1^\ast, \sigma_e \sim N(\rho_1^\ast, \sigma_e^2)
+\]
+were the true density is $\rho_1^\ast$ and the error variance is $\sigma_e^2$.
+
+Assume that there is a single continous source of unknown strength $N_0$ and unknown
+location ${\bf x}_0$.   Priors for the strength and location are $\pi(N_0)$ and $\pi({\bf x}_0)$
+respectively.
+
+Assume that the velocity field ${\bf v}()$ and the diffusion field ${\bf a}()$ are known.
+
+Using the results from the previous section, conditional on $N_0$ and ${\bf x}_0$ the 
+observed density at ${\bf x}_1$ is
+\[
+  \rho_1^\ast= N_0 h({\bf x}_1|{\bf x}_0, {\bf v}(), {\bf a}(), \Psi)
+\]
+which we write for brevity as 
+\[
+   \rho_1^\ast = h_1^\ast({\bf x}_0) = h_1^\ast
+\]
+but noting its dependence on ${\bf x}_0$.
+
+It follows that the joint distribution of the unknown source strength $N_0$ and location ${\bf x}_0$ is
+\begin{eqnarray*}
+   p(N_0,{\bf x}_0|\rho_1,{\bf x}_1)
+   &\propto&
+   \pi(N_0) \pi({\bf x}_0) \exp\left(-\frac{1}{2\sigma_e^2}
+           \left[\rho_1-N_0h_1^\ast({\bf x}_0)\right]^2\right)\\
+   &\propto&
+   \pi(N_0) \pi({\bf x}_0) \exp\left(-\frac{(h_1^\ast)^2}{2\sigma_e^2}
+           \left[N_0-\frac{\rho_1}{h_1^\ast}\right]^2\right)
+\end{eqnarray*}
+A suitable prior for $N_0$ is the Exponential($\mu$) distribution
+\begin{eqnarray*}
+  N_0  &\sim& \text{Exp}(\mu)\\
+  \pi(N_0) &=& \mu e^{-\mu N_0}
+\end{eqnarray*}
+This can be marginalised out of the posterior distribution as follows. 
+Firstly the joint distribution is
+\begin{eqnarray*}
+   p(N_0,{\bf x}_0|\rho_1,{\bf x}_1)
+   &\propto&
+   \pi({\bf x}_0) e^{-\mu N_0} 
+           \exp\left(-\frac{(h_1^\ast)^2}{2\sigma_e^2}
+           \left[N_0-\frac{\rho_1}{h_1^\ast}\right]^2\right)\\
+   &\propto& 
+   \pi({\bf x}_0)
+           \exp\left( -\frac{(h_1^\ast)^2}{2\sigma_e^2}
+           \left[N_0-\left(\frac{\rho_1}{h_1^\ast} -
+                           \frac{\mu\sigma_e^2}{(h_1^\ast)^2}
+                           \right)\right]^2
+           - \frac{\rho_1\mu}{h_1^\ast} + \frac{\mu^2\sigma_e^2}{2(h_1^\ast)^2}
+                           \right)
+\end{eqnarray*}
+Integrating out $N_0$ leads to
+\begin{eqnarray*}
+   p({\bf x}_0|\rho_1,{\bf x}_1)
+   &\propto&
+   \pi({\bf x}_0) \frac{\sigma_e}{h_1^\ast}
+     \exp\left(
+           - \frac{\rho_1\mu}{h_1^\ast} + \frac{\mu^2\sigma_e^2}{2(h_1^\ast)^2}
+                           \right)
+\end{eqnarray*}
+If we let $\sigma_e\rightarrow 0$ (indicating very accurate observations) we
+are left with a very simple form for the posterior:
+\begin{eqnarray*}
+   p({\bf x}_0|\rho_1,{\bf x}_1)
+   &\propto&
+   \pi({\bf x}_0) \frac{1}{h_1^\ast} e^{\frac{\rho_1\mu}{h_1^\ast}}
+\end{eqnarray*}
+which we plot below.
+
+```{r}
+th <- 5
+tm <- 7
+ax <- 2^2; ay <- 5^2
+x1 <- 50; y1 <- 50
+rho1 <- 1; mu <- 1
+amat <- n0*outer(xvec,yvec, hfunc,
+                 x0=x1,y0=y1, vx=-vx,vy=-vy, ax=ax,ay=ay, teps=teps, th=th,tm=tm)
+
 qmat <- exp(-max(amat)/3.0/amat) * (1/amat)
 image(xvec, yvec, qmat, asp=1, 
       main=bquote(p(x[0]*"|"*x[1])*":" ~ x[1]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), 
       xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
 ```
 
+```{r}
+par(mfrow=c(1,2))
+contour(amat, main=expression(h(x[0]*"|"*x[1])))
+contour(qmat, main=expression(p(x[0]*"|"*x[1])))
+```
 
