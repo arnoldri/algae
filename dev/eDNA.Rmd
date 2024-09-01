@@ -3,9 +3,9 @@ title: "eDNA"
 author: "Richard Arnold"
 date: '2024-07-16'
 output:
-  pdf_document: default
   html_document:
     code_folding: hide
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
