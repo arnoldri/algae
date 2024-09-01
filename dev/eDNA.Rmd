@@ -3,9 +3,9 @@ title: "eDNA"
 author: "Richard Arnold"
 date: '2024-07-16'
 output:
+  pdf_document: default
   html_document:
     code_folding: hide
-  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -382,7 +382,7 @@ are left with a very simple form for the posterior:
    &\propto&
    \pi({\bf x}_0) \frac{1}{h_1^\ast} e^{\frac{\rho_1\mu}{h_1^\ast}}
 \end{eqnarray*}
-which we plot below.
+which we plot below for a uniform prior on the source location $\pi({\bf x}_0)\propto 1$.
 
 ```{r}
 th <- 5
@@ -399,9 +399,38 @@ image(xvec, yvec, qmat, asp=1,
       xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
 ```
 
+Plotting again, but as a contour map
 ```{r}
 par(mfrow=c(1,2))
 contour(amat, main=expression(h(x[0]*"|"*x[1])))
 contour(qmat, main=expression(p(x[0]*"|"*x[1])))
+```
+
+
+
+A different prior: e.g. normally distributed in $y$ (centered on $y_a$ with 
+standard deviation $\sigma_a$) and uniform in $x$:
+\[
+   \pi({\bf x}_0) \propto \exp\left(-\frac{1}{2\sigma_a^2}\left[x_{0y}-y_a\right]^2\right)
+\]
+
+
+```{r}
+ya <- 60
+sigmaa <- 10
+p0mat <- t(array(exp(-0.5*(yvec-ya)^2/sigmaa^2), dim=dim(amat)))
+image(xvec, yvec, p0mat, main=bquote(pi(x[0]) %prop% N[y](.(ya),.(sigmaa)^2)), 
+      xlab=expression(x[0]), ylab=expression(y[0]))
+```
+
+The effect of the prior is shown at right below
+```{r}
+par(mfrow=c(1,2))
+image(xvec, yvec, qmat, asp=1, 
+      main=bquote(p(x[0]*"|"*x[1])*":"  ~ pi(x[0]) %prop% 1), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
+image(xvec, yvec, p0mat*qmat, asp=1, 
+      main=bquote(p(x[0]*"|"*x[1])*":" ~ pi(x[0]) %prop% N[y](.(ya),.(sigmaa)^2)), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
 ```
 
