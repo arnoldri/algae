@@ -234,6 +234,7 @@ In the Gaussian dispersal example
 \]
 
 ```{r}
+invisible()
 #th <- 5
 #tm <- 7
 #ax <- 2^2; ay <- 5^2
@@ -247,6 +248,7 @@ In the Gaussian dispersal example
 #image(xvec, yvec, amat,asp=1, 
 #      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), 
 #      xlab="x", ylab="y",col=colvec)
+invisible()
 ```
 
 **Equilibrium Density**: 

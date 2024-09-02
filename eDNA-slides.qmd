@@ -1,6 +1,6 @@
 ---
 title: "eDNA"
-subtitle: "Modelling spread"
+subtitle: "Modelling Environmental DNA Spread"
 author: "RA, RV<br>*Victoria University of Wellington*"
 institute: "VUW, Cawthron"
 date: "2024"
