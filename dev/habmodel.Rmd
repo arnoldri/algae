@@ -293,15 +293,17 @@ pimat <- outer(qvec,pavec)
 ```
 
 ```{r}
-plot(resvec,pavec,xlab="1 week residency",ylab="Initiation probability")
+plot(resvec,pavec,xlab="1 week residency",ylab="Initiation probability",
+     main="Initiation probability in Nydia Polygons")
 plot((nydia_sf %>% mutate(pa=pavec[nid]))['pa'], main="Weekly initiation probability")
 ```
 
 ```{r}
+# Innovation indicator
 set.seed(-2)
 imat <- array(rbinom(length(pimat),1,pimat),dim=dim(pimat))
 apply(imat,2,sum)
-plot((nydia_sf %>% mutate(nstart=apply(imat,2,sum)[nid]))['nstart'], main="Number of occurrences")
+plot((nydia_sf %>% mutate(nstart=apply(imat,2,sum)[nid]))['nstart'], main="Number of initiations")
 text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
      lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
 ```
