@@ -55,11 +55,13 @@ source("setup.R")
    
    Mass conservation implies
    \[ 
-     \sum_{i=1}^n P_{ijt}\leq 1 \qquad\text{for all $j,t$}
+     W_{jt} = \sum_{i=1}^n P_{ijt}\leq 1 \qquad\text{for all $j,t$}
    \]
    where the sum is less than 1 when mass is lost at the edges of the set of
    polygons.
- * $R_{it} \equiv P_{iit}$ = proportion of mass remaining resident in week $t$
+ * Retention: $W_{jt} \equiv \sum_{i=1}^n P_{ijt}$ proportion of mass in polygon $j$ 
+   retained by the system (i.e. not lost at the edges) over the one week period at time $t$
+ * $R_{it} \equiv P_{iit}$ = proportion of mass remaining resident in polygon $i$ in week $t$
  * ${\bf x}_{it}$ covariates in polygon $i$ at time $t$ (temperature, salinity, etc.)
  
  * At time step $t$ the epoch indicator $E_t|E_{t-1}$ is drawn
@@ -89,13 +91,14 @@ source("setup.R")
       A_{it} | I_{it}=0 &\sim& \delta_0\\
       A_{it} | I_{it}=1 &\sim& \text{Gamma}(a,b)
    \end{eqnarray*}
- * Baseline algal mass distribution $M_{i0}=0$ for all $i$
+   $\delta_0$ is a point mass at zero: we get no new biomass if $I_{it}=0$.
+ * Baseline algal mass distribution $M_{i0}=0$ for all $i$: i.e. no mass at time $t=0$.
  * Time evolution of algal mass $M_{it}$ for $t>0$
    \[
       M_{it} = e^{\eta_{it}}\left[
-               A_{it} + e^{\alpha_{E_t} + {\bf x}_{it}^T{\beta}_2 + \lambda_2 \logit R_{it}}
+               A_{it} + e^{-\gamma (1-E_t) + E_t(\alpha + {\bf x}_{it}^T{\beta}_2 + \lambda_2 \logit R_{it})}
                         \sum_{j=1}^n P_{ijt} 
-                                     e^{{\bf x}_{jt}^T{\beta}_1 + \lambda_1 \logit R_{jt}}
+                                     e^{E_t({\bf x}_{jt}^T{\beta}_1 + \lambda_1 \logit R_{jt})}
                                      M_{j,t-1}
                \right]
    \]
@@ -105,6 +108,9 @@ source("setup.R")
    \]
    We may not need both of $({\lambda_1,\beta}_1)$ (growth before transport) and
    $(\lambda_2,{\beta}_2)$ (growth after transport).
+   
+   $\alpha>0$ is the basic (covariate independent) growth rate of blooms in a favourable epoch $E_t=1$,
+   $\gamma>0$ is the decay rate of blooms in an unfavourable epoch $E_t=0$.
    
  * Observation of algal density $Y_{it}$
    \begin{eqnarray*}
@@ -158,7 +164,7 @@ Parameters (to be estimated)
 
 ## Data in the Nydia area
 
-```{r}
+```{r, warning=FALSE}
 nydia_sf <- st_crop(marlpoly_sf.trim, 
                     xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
 nydia_sf <- nydia_sf %>% filter(!(CLUSTER_ID%in%c(48,71,162,194,251,258,293,406)))
@@ -198,9 +204,11 @@ plot((nydia_sf %>% mutate(residency=resvec[nid]))['residency'], main="1 week wat
 
 
 ```{r}
-hist(apply(pmat,2,sum), xlab=expression("Retention "*Sigma[i]*P[ij]),
+hist(apply(pmat,2,sum), xlab=expression(W[j]=="Retention "*Sigma[i]*P[ij]),
      main="Retention", breaks=11)
 ```
+
+## Data on events
 
 ```{r}
 # Events
@@ -220,6 +228,10 @@ invisible(by(eventsub, eventsub$CLUSTER_ID,
              }))
 abline(v=wvec[c(1,length(wvec))],col="red")
 ```
+
+### Covariates
+
+Residency: we have matrices $P_{ijt}$ for the weeks 2518-2529 (dates `r week.as.date(2518)`-`r week.as.date(2529)`)
 
 ```{r}
 # Residency
@@ -247,6 +259,26 @@ invisible(apply(xmat, 1, function(xvec) lines(wvec,xvec)))
 axis(4, at=xmat[,ncol(xmat)], lab=nydia.poly, las=2, cex.axis=0.6)
 ```
 
+Temperature over time
+
+```{r}
+plot(NA,NA,
+     xlim=range(tempdata$date),
+     ylim=range(tempdata$tmin,na.rm=TRUE),
+     axes=FALSE,xlab="Date",ylab="Daily minimum temperature")
+axis.Date(1); axis(2); box()
+invisible(by(tempdata,tempdata$Station,function(tt) lines(tt$date,tt$tmin)))
+```
+
+```{r}
+plot(NA,NA,
+     xlim=range(event$date),
+     ylim=range(tempdata$tmin,na.rm=TRUE),
+     axes=FALSE,xlab="Date",ylab="Daily minimum temperature")
+axis.Date(1); axis(2); box()
+invisible(by(tempdata,tempdata$Station,function(tt) lines(tt$date,tt$tmin)))
+```
+
 ## Model implementation
 
 ```{r}
@@ -254,7 +286,8 @@ nt <- 5*52 + 1 # number of weeks to simulate
 w1 <- 2505; w2 <- w1 + nt-1
 #week.as.date(2505) # 2018-01-01
 tvec <- w1:w2
-qvec <- seasonfunc(tvec)
+qvec <- seasonfunc(tvec) # TRUE if month is Dec-Jul, FALSE if month is Aug-Nov
+# Bloom initiation probability
 a0 <- -9.0; b0 <- 6.0; pavec <- expit(a0+b0*resvec)
 pimat <- outer(qvec,pavec)
 ```
@@ -281,25 +314,6 @@ axis.Date(1,format="%b %Y", las=2); axis(2); box()
 
 
 
-Temperature over time
-
-```{r}
-plot(NA,NA,
-     xlim=range(tempdata$date),
-     ylim=range(tempdata$tmin,na.rm=TRUE),
-     axes=FALSE,xlab="Date",ylab="Daily minimum temperature")
-axis.Date(1); axis(2); box()
-invisible(by(tempdata,tempdata$Station,function(tt) lines(tt$date,tt$tmin)))
-```
-
-```{r}
-plot(NA,NA,
-     xlim=range(event$date),
-     ylim=range(tempdata$tmin,na.rm=TRUE),
-     axes=FALSE,xlab="Date",ylab="Daily minimum temperature")
-axis.Date(1); axis(2); box()
-invisible(by(tempdata,tempdata$Station,function(tt) lines(tt$date,tt$tmin)))
-```
 
 
 

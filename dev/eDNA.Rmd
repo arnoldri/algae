@@ -3,14 +3,130 @@ title: "eDNA"
 author: "Richard Arnold"
 date: '2024-07-16'
 output:
+  pdf_document: default
   html_document:
     code_folding: hide
-  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+## Detection of eDNA
+
+ * A volume $V_S$ of water is collected, and all of the eDNA it contains is collected by filtration.
+   Assume a count $N_j$ of eDNA fragments of type $j$ is collected ($j=1,\ldots,J$). 
+   If the number density of fragments in the water is $\nu_j$ then
+   \[
+      N_j | \nu_j, V_S \sim \text{Poisson}(\nu_jV_S)
+   \]
+ * The collected eDNA is mixed with a volume $V_M$ of a proprietary mix of primers, probes and water;
+ * A test volume $V_T$ ($1\mu\ell$) is taken from the mixture: The count of fragments in the test volume is
+   \[
+      n_j | N_j,V_M,V_T\sim\text{Poisson}(N_jV_T/V_M)
+   \]
+ * The test volume is atomised into $m$ droplets.  The count of fragments in droplet $i$ is 
+   \[
+      y_{ji} | n_j,m \sim\text{Poisson}(n_j/m)
+   \]
+ * The probability that droplet $i$ has zero fragments is
+   \[
+      \Pr(y_{ji}=0 | n_j,m) = \exp\left(-\frac{n_j}{m}\right)
+   \]
+   and thus the probability that it contains any fragments is
+   \[
+      \Pr(y_{ji}>0 | n_j,m) = 1-\exp\left(-\frac{n_j}{m}\right)
+   \]
+ * The eDNA in the droplets is amplified by PCR, and $m_{j+}$ of the droplets are observed to 
+   be positive for fragment type $j$.  Thus the observed proportion of positive 
+   droplets is 
+   \[
+      \widehat{p}_+ = \frac{m_{j+}}{m}
+   \]
+   and
+   \[
+      m_{j+} | n_j,m \sim \text{Binomial}\left(m,1-e^{-n_j/m}\right)
+   \]
+   or if $n_j/m$ is very small then
+   \[
+      m_{j+} | n_j,m \sim \text{Poisson}\left(m\left(1-e^{-n_j/m}\right)\right)
+   \]
+   Note that we assume no false positives and no false negatives when individual 
+   droplets are amplified and tested for the presence of the eDNA.  
+
+This process is aimed at determining $\nu_j$, the original number density in the water
+from which the sample was collected.  A simple estimate of $\mu_j$ is 
+\[
+   \widehat{\nu}_j = -\frac{V_M m}{V_SV_T} \log\left(1-\frac{m_{j+}}{m}\right)
+\]
+However in this application we are most interested in the probability that the process leads to negative result
+when $\nu_j$ is non-zero. i.e. we want to know
+\begin{eqnarray}
+  && \mbox{}\hspace{-2cm}\Pr(m_{j+}=0 | m,V_S,V_T,V_M,\nu_j)\\
+  &=& 
+  \sum_{N_j=0}^\infty \sum_{n_j=0}^\infty
+  \Pr(m_{j+}=0 | n_j,m) \Pr(n_j | N_j,V_M,V_T) \Pr(N_j | \nu_j,V_S)\\
+  &=& 
+  \sum_{N_j=0}^\infty \sum_{n_j=0}^\infty
+  \exp\left(-m\left[1-e^{-n_j/m}\right]\right) 
+  \exp\left(-\frac{N_jV_T}{V_M}\right)\frac{\left(\frac{N_jV_T}{V_M}\right)^{n_j}}{n_j!}
+  \exp\left(-\nu_jV_S\right)\frac{\left(\nu_jV_S\right)^{N_j}}{N_j!}
+\end{eqnarray}
+Note that the sum over $n_j$ should only be from 0 to $N_j$, but we sum to infinity because the 
+additional terms are all negligible.  
+
+Writing the ratio $V_T/V_M$, i.e. the proportion of the mixture that is atomised and tested, as $d$,
+and suppressing the index $j$
+\begin{eqnarray}
+  && \mbox{}\hspace{-2cm}\Pr(m_{+}=0 | m,V_S,d,\nu)\\
+  &=& 
+  \sum_{N=0}^\infty \sum_{n=0}^\infty
+  \Pr(m_{+}=0 | n,m) \Pr(n | N,d) \Pr(N | \nu,V_S)\\
+  &=& 
+  \sum_{N=0}^\infty \sum_{n=0}^\infty
+  \exp\left(-m\left[1-e^{-n/m}\right]\right) 
+  e^{-Nd}\frac{(Nd)^{n}}{n!}
+  e^{-\nu V_S}\frac{(\nu V_S)^{N}}{N!}
+\end{eqnarray}
+
+At very low concentrations
+\[
+   n | \nu, V_S, d \sim \text{Poisson}(\nu V_Sd)
+\]
+so that
+\begin{eqnarray}
+  && \mbox{}\hspace{-2cm}\Pr(m_{+}=0 | m,V_S,d,\nu)\\
+  &=& 
+  \sum_{n=0}^\infty
+  \Pr(m_{+}=0 | n,m) \Pr(n | \nu,V_S,d)\\
+  &=& 
+  \sum_{n=0}^\infty
+  \exp\left(-m\left[1-e^{-n/m}\right]\right) 
+  e^{-\nu V_S d}\frac{(\nu V_S d)^{n}}{n!}\\
+  &=& 
+  \sum_{n=0}^\infty
+  \exp\left(-m\left[1-e^{-n/m}\right]\right) 
+  e^{-\lambda}\frac{\lambda^{n}}{n!}\\
+\end{eqnarray}
+where $\lambda = \nu V_S d$.
+
+Typically we have $m=2\times10^4$ droplets.  We might expect $\nu V_s\simeq 10$ fragments to be catpured, 
+and a subsampling of $d=1/20$, and in that case $\lambda\simeq 0.5$
+
+```{r}
+probmp0 <- function(lambda, m=20000, nbig=20000) {
+  nvec <- 0:nbig
+  fval <- sapply(lambda, function(lambdav) sum(exp(-m*(1-exp(-nvec/m)))*dpois(nvec,lambdav)))
+  return(fval)
+}
+m <- 20000; nbig <- m
+np <- 101
+lambdavec <- 10^(seq(from=-3,to=+1,length=np))
+plot(lambdavec, (probmp0(lambdavec, m=m, nbig=nbig)), type="l",
+     xlab=expression(lambda), ylab=expression("Pr("*m["+"]==0*"): Prob of no detections"), 
+     main=bquote(lambda==nu*V[S]*d*";  "*m*"="*.(m)*" droplets"))
+```
+
 
 ## Particle dispersal
 
