@@ -2,12 +2,12 @@
 title: "HAB model"
 date: '2024-04-02'
 output:
+  html_document: default
   pdf_document: 
     latex_engine: xelatex
     keep_tex: true
     includes:
       in_header: preamble.tex
-  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -281,6 +281,36 @@ invisible(by(tempdata,tempdata$Station,function(tt) lines(tt$date,tt$tmin)))
 
 ## Model implementation
 
+Nydia polygons
+```{r warning=FALSE}
+plot((nydia_sf %>% st_geometry()), main="Nydia Polygons")
+text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
+     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5, col="black")
+plot((nydia_sf %>% select(volume_15)), main="Nydia Polygon Volumes to 15m")
+```
+
+Communication matrix
+```{r}
+pmat <- connsub[[1]]
+dimnames(pmat) <- list(nydia_sf$CLUSTER_ID,nydia_sf$CLUSTER_ID)
+#dim(pmat) # 17 17
+n <- nrow(pmat) # 17 polygons
+# residency
+resvec <- diag(pmat)
+# retention
+retvec <- apply(pmat,2,sum)
+```
+
+```{r}
+image(1:n, 1:n, pmat, axes=FALSE, xlab="Destination", ylab="Source", 
+      main="Communication between polygons",asp=1)
+axis(1,at=1:n,lab=nydia_sf$CLUSTER_ID,las=2,cex.axis=0.7)
+axis(2,at=1:n,lab=nydia_sf$CLUSTER_ID,las=2,cex.axis=0.7)
+box()
+```
+
+
+
 ```{r}
 nt <- 5*52 + 1 # number of weeks to simulate
 w1 <- 2505; w2 <- w1 + nt-1
@@ -288,7 +318,8 @@ w1 <- 2505; w2 <- w1 + nt-1
 tvec <- w1:w2
 qvec <- seasonfunc(tvec) # TRUE if month is Dec-Jul, FALSE if month is Aug-Nov
 # Bloom initiation probability
-a0 <- -9.0; b0 <- 6.0; pavec <- expit(a0+b0*resvec)
+a0 <- -9.0; b0 <- 6.0; 
+pavec <- expit(a0+b0*resvec)
 pimat <- outer(qvec,pavec)
 ```
 
