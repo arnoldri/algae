@@ -80,3 +80,24 @@ seasonfunc <- function(week) {
   as.numeric(format(week.as.date(week), "%m")) %in% c(12,1,2,3,4,5,6,7)
 }
 
+
+#' @export
+block01 <- function(tvec,vvec,addheadtail=TRUE) {
+  aa <- cbind(tvec,vvec)
+  idxp1 <- which(diff(aa[,2])==+1)
+  idxm1 <- which(diff(aa[,2])==-1)
+  aa <- as.list(as.data.frame(t(aa)))
+  for(i in idxp1) {
+    aa[[i+1]] <- c(aa[[i+1]][1],0 ,aa[[i+1]])
+  }
+  for(i in idxm1) {
+    aa[[i]] <- c(aa[[i]], aa[[i]][1],0)
+  }
+  aa <- t(matrix(unlist(aa),nrow=2))
+  if(addheadtail) {
+    aa <- rbind(c(aa[1,1],0),
+                aa,
+                c(aa[nrow(aa)],0))
+  }
+  return(aa)
+}

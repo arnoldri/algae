@@ -51,6 +51,7 @@ source("setup.R")
  * $t$ time in weeks: Week 0 is the week of 1 January 2018, $t=0,\ldots,T$
  * $q_t$ is the seasonal indicator: 1 if the week is in the months of December-July, 0 otherwise
  * $V_i$ volume to a depth of 15m
+ * $A_i$ area
  * $P_{ijt}$ = proportion of mass in polygon $j$ moving to polygon $i$ in week $t$. 
    
    Mass conservation implies
@@ -77,7 +78,7 @@ source("setup.R")
    
  * $\pi_{it}$ bloom initiation probability in polygon $i$ at time $t$
    \[
-      \logit(\pi_{it}) = \mu_0 + {\bf x}_{it}^T{\beta}_0 + \lambda_0 \logit(R_{it})
+      \logit(\pi_{it}) = \frac{A_i}{a_0}\left[\mu_0 + {\bf x}_{it}^T{\beta}_0 + \lambda_0 \logit(R_{it})\right]
    \]
 
  * At time step $t$ in each polygon $i$ the innovation indicator is drawn
@@ -88,15 +89,15 @@ source("setup.R")
    
  * New biomass innovation in polygon $i$ at time $t$
    \begin{eqnarray*}
-      A_{it} | I_{it}=0 &\sim& \delta_0\\
-      A_{it} | I_{it}=1 &\sim& \text{Gamma}(a,b)
+      B_{it} | I_{it}=0 &\sim& \delta_0\\
+      B_{it} | I_{it}=1 &\sim& \text{Gamma}(a,b)
    \end{eqnarray*}
    $\delta_0$ is a point mass at zero: we get no new biomass if $I_{it}=0$.
  * Baseline algal mass distribution $M_{i0}=0$ for all $i$: i.e. no mass at time $t=0$.
  * Time evolution of algal mass $M_{it}$ for $t>0$
    \[
       M_{it} = e^{\eta_{it}}\left[
-               A_{it} + e^{-\gamma (1-E_t) + E_t(\alpha + {\bf x}_{it}^T{\beta}_2 + \lambda_2 \logit R_{it})}
+               B_{it} + e^{-\gamma (1-E_t) + E_t(\alpha + {\bf x}_{it}^T{\beta}_2 + \lambda_2 \logit R_{it})}
                         \sum_{j=1}^n P_{ijt} 
                                      e^{E_t({\bf x}_{jt}^T{\beta}_1 + \lambda_1 \logit R_{jt})}
                                      M_{j,t-1}
@@ -131,6 +132,7 @@ Fixed
 
 * $q_t$ seasonal indicator (1 if the week is in the months of December-July, 0 otherwise)
 * $V_i$ volume of polygon $i$ to a depth of 15m
+* $A_i$ area of polygon $i$
 
 Observed/Modelled separately
 
@@ -142,7 +144,7 @@ Latent (to be estimated)
 
 * $E_t$ epoch indicator
 * $I_{it}$ innovation indicator
-* $A_{it}$ innovation biomass
+* $B_{it}$ innovation biomass
 * $M_{it}$ mass in polygon $i$ at time $t$
 
 Derived
@@ -156,7 +158,7 @@ Parameters (to be estimated)
 * $\tau_1$ growth epoch persistence probability
 * $(\alpha_0, \alpha_1)$ baseline log growth parameters in epochs 0 (decay) and 1 (growth)
 * $\mu_0$ baseline bloom initiation probability parameter
-* $(\lambda_0,\beta_0)$ parameters of bloom initiation probability
+* $(a_0,\lambda_0,\beta_0)$ parameters of bloom initiation probability
 * $(\lambda_1,\beta_1)$ parameters of pre-transport growth
 * $(\lambda_2,\beta_2)$ parameters of post-transport growth
 * $\sigma_\eta$ - mass evolution error
@@ -186,7 +188,7 @@ eventsubw <- eventsub[eventsub$week%in%wvec,]
 #length(unique(eventsubw$week)) # 12
 #length(unique(eventsubw$CLUSTER_ID)) # 1 # just one polygon: 400
 
-pmat <- connsub[[1]]
+pmat <- t(connsub[[1]])
 #dim(pmat) # 17 17
 n <- nrow(pmat) # 17 polygons
 nydia_sf$nid <- 1:n
@@ -204,7 +206,7 @@ plot((nydia_sf %>% mutate(residency=resvec[nid]))['residency'], main="1 week wat
 
 
 ```{r}
-hist(apply(pmat,2,sum), xlab=expression(W[j]=="Retention "*Sigma[i]*P[ij]),
+hist(apply(pmat,1,sum), xlab=expression(W[j]=="Retention "*Sigma[i]*P[ij]),
      main="Retention", breaks=11)
 ```
 
@@ -282,24 +284,38 @@ invisible(by(tempdata,tempdata$Station,function(tt) lines(tt$date,tt$tmin)))
 ## Model implementation
 
 Nydia polygons
+
 ```{r warning=FALSE}
+#par(mfrow=c(1,2))
 plot((nydia_sf %>% st_geometry()), main="Nydia Polygons")
 text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
      lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5, col="black")
+#plot((nydia_sf %>% st_geometry()), main="Nydia Polygon Volumes to 15m")
+#plot((nydia_sf %>% select(volume_15)), add=TRUE)
 plot((nydia_sf %>% select(volume_15)), main="Nydia Polygon Volumes to 15m")
 ```
 
 Communication matrix
+
 ```{r}
-pmat <- connsub[[1]]
+pmat <- t(connsub[[1]])
 dimnames(pmat) <- list(nydia_sf$CLUSTER_ID,nydia_sf$CLUSTER_ID)
 #dim(pmat) # 17 17
 n <- nrow(pmat) # 17 polygons
 # residency
 resvec <- diag(pmat)
 # retention
-retvec <- apply(pmat,2,sum)
+retvec <- apply(pmat,1,sum)
+rrdf <- data.frame(CLUSTER_ID=names(resvec), residency=resvec, retention=retvec)
+nydia_sf <- merge(nydia_sf,rrdf)
 ```
+
+```{r warning=FALSE}
+#par(mfrow=c(1,2))
+plot((nydia_sf %>% select(retention)), main="Nydia Polygon 1 Week Retention")
+plot((nydia_sf %>% select(residency)), main="Nydia Polygon Residency")
+```
+
 
 ```{r}
 image(1:n, 1:n, pmat, axes=FALSE, xlab="Destination", ylab="Source", 
@@ -312,38 +328,211 @@ box()
 
 
 ```{r}
-nt <- 5*52 + 1 # number of weeks to simulate
+nt <- 5*52 + 18 # number of weeks to simulate
 w1 <- 2505; w2 <- w1 + nt-1
 #week.as.date(2505) # 2018-01-01
 tvec <- w1:w2
 qvec <- seasonfunc(tvec) # TRUE if month is Dec-Jul, FALSE if month is Aug-Nov
-# Bloom initiation probability
-a0 <- -9.0; b0 <- 6.0; 
-pavec <- expit(a0+b0*resvec)
-pimat <- outer(qvec,pavec)
 ```
-
-```{r}
-plot(resvec,pavec,xlab="1 week residency",ylab="Initiation probability",
-     main="Initiation probability in Nydia Polygons")
-plot((nydia_sf %>% mutate(pa=pavec[nid]))['pa'], main="Weekly initiation probability")
-```
-
-```{r}
-# Innovation indicator
-set.seed(-2)
-imat <- array(rbinom(length(pimat),1,pimat),dim=dim(pimat))
-apply(imat,2,sum)
-plot((nydia_sf %>% mutate(nstart=apply(imat,2,sum)[nid]))['nstart'], main="Number of initiations")
-text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
-     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5)
-```
-
 
 ```{r}
 plot(week.as.date(tvec), qvec, type="s", xlab="", ylab="Season", axes=FALSE)
-axis.Date(1,format="%b %Y", las=2); axis(2); box()
+title("Summer Seasons")
+#axis.Date(1,format="%b %Y", las=2); axis(2); box()
+axis.Date(1,format="%Y", las=1); axis(2); box()
 ```
+
+Epochs
+
+```{r}
+set.seed(-4)
+tau0 <- 0.30 # initiation probability
+tau1 <- 0.90 # persistence probability
+evec <- rep(0,length(tvec))
+evec[1] <- rbinom(1,1,tau0*qvec[1])
+for(i in 2:nt) {
+  evec[i] <- if(evec[i-1]==0) rbinom(1,1,tau0*qvec[i]) else rbinom(1,1,tau1*qvec[i])
+}
+```
+
+
+
+```{r}
+plot(week.as.date(tvec), qvec, type="s", col="grey", 
+     xlab="Date", ylab="Bloom favourability", 
+     main="Bloom epochs", axes=FALSE)
+bb <- block01(tvec,qvec)
+polygon(week.as.date(bb[,1]), bb[,2], col="grey")
+lines(week.as.date(tvec), evec, type="s")
+bb <- block01(tvec,evec)
+polygon(week.as.date(bb[,1]),bb[,2], col="orange")
+#polygon(week.as.date(c(tvec[1],tvec,tvec[length(tvec)])), c(0,evec,0), col="orange")
+axis.Date(1); axis(2,at=c(0,1)); box()
+```
+
+
+```{r}
+# Bloom initiation probability
+volvec <- nydia_sf$volume_15
+areavec <- as.numeric(nydia_sf$area)
+a0 <- 1
+#mu0 <- -6.0; lambda0 <- 3.03
+# mu0 <- -5.8; lambda0 <- 3.1
+mu0 <- -5.2; lambda0 <- 2.7
+pavec <- expit((areavec/a0)*(mu0 + lambda0*logit(resvec)))
+#plot(resvec, logit(pavec))
+plot(resvec, pavec, xlab="Residency", ylab=expression("Bloom initiation probability: "*pi[it]),
+     main="Bloom initiation probability", pch=" "); text(resvec, pavec, lab=names(resvec), cex=0.6)
+```
+
+```{r warning=FALSE}
+plot((nydia_sf %>% mutate(pa=pavec[nid]))['pa'], main="Weekly initiation probability",reset=FALSE)
+text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
+     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.8, col="white")
+```
+
+```{r}
+pimat <- outer(qvec*evec,pavec)
+colnames(pimat) <- names(pavec)
+# Innovation indicator
+set.seed(-5)
+imat <- array(rbinom(length(pimat),1,pimat),dim=dim(pimat))
+apply(imat,2,sum)
+colnames(imat) <- names(pavec)
+breaks <- 0.5+0:max(apply(imat,2,sum))
+plot((nydia_sf %>% mutate(nstart=apply(imat,2,sum)[nid]))['nstart'], 
+     main="Number of initiations", reset=FALSE, breaks=breaks)
+text(nydia_sf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(), 
+     lab=as.character(nydia_sf$CLUSTER_ID), cex=0.5, col="white")
+```
+
+Time of initiations
+
+```{r}
+image(week.as.date(tvec), 1:n, imat, axes=FALSE, xlab="Week", ylab="Polygon")
+title("Bloom initiation")
+axis.Date(1); axis(2,at=1:n,lab=names(pavec), las=2); box()
+abline(v=as.Date(paste(2018:2023,"01-01",sep="-")), lty=2)
+```
+
+Biomass innovation
+
+```{r}
+set.seed(-9)
+abio <- 3; bbio <- 0.3
+btmat <- array(rgamma(prod(dim(pimat)),abio,bbio),dim=dim(pimat))
+btmat <- imat*btmat
+```
+
+```{r}
+image(week.as.date(tvec), 1:n, btmat, axes=FALSE, xlab="Week", ylab="Polygon")
+title("Innovation biomass")
+axis.Date(1,format="%Y"); axis(2,at=1:n,names(pavec),las=2); box()
+abline(v=as.Date(paste(2018:2023,"01-01",sep="-")), lty=2)
+```
+
+Mass evolution
+
+```{r}
+mmat <- array(0,dim=dim(pimat))
+cmat <- mmat
+mmat[1,] <- btmat[1,]
+cmat[1,] <- mmat[1,]/volvec
+set.seed(-3)
+sigma.eta <- 0.03
+sigma.logy <- 0.03
+lambda1 <- 0 ## 1.0
+alpha <- 0.5
+gamma <- 2.5 ## 1
+lambda2 <- 0 ## 1.0
+etamat <- array(rnorm(prod(dim(pimat)),0,sigma.eta),dim=dim(pimat))
+for(t in 2:nt) {
+  dvec <- exp(evec[t]*lambda1*logit(resvec))
+  mvec <- pmat%*%diag(dvec)%*%mmat[t-1,]
+  mvec <- btmat[t,] + exp(-gamma*(1-evec[t]) + evec[t]*(alpha+lambda2*logit(resvec)))*mvec
+  mmat[t,] <- exp(etamat[t,])*mvec
+  cmat[t,] <- mmat[t,]/volvec
+}
+ymat <- array(exp(rnorm(prod(dim(cmat)),0,sigma.logy)),dim=dim(pimat))
+```
+
+```{r}
+par(mfrow=c(1,2))
+plot(tvec,(mmat[,2]))
+abline(v=tvec[evec==1],col="lightgrey")
+points(tvec,mmat[,2])
+plot(tvec,log(mmat[,2]))
+abline(v=tvec[evec==1],col="lightgrey")
+points(tvec,log(mmat[,2]))
+```
+
+```{r}
+ipoly <- which(names(pavec)=="200")
+par(mfrow=c(1,2))
+plot(tvec,(mmat[,ipoly]))
+abline(v=tvec[evec==1],col="lightgrey")
+points(tvec,mmat[,ipoly])
+plot(tvec,log(mmat[,ipoly]))
+abline(v=tvec[evec==1],col="lightgrey")
+points(tvec,log(mmat[,ipoly]))
+```
+
+```{r}
+colnames(mmat) <- names(pavec)
+plot(mmat[,"200"])
+plot(mmat[,"32"])
+plot(mmat[,"32"],mmat[,"357"])
+```
+
+
+
+```{r}
+image(week.as.date(tvec), 1:n, mmat, axes=FALSE, xlab="Week", ylab="Polygon")
+title("Algal biomass")
+axis.Date(1,format="%Y"); axis(2,at=1:n,names(pavec),las=2); box()
+abline(v=as.Date(paste(2018:2023,"01-01",sep="-")), lty=2)
+```
+
+```{r}
+image(week.as.date(tvec), 1:n, cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+title("Algal concentration")
+axis.Date(1,format="%Y"); axis(2,at=1:n,names(pavec),las=2); box()
+abline(v=as.Date(paste(2018:2023,"01-01",sep="-")), lty=2)
+```
+
+```{r}
+image(week.as.date(tvec), 1:n, cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+title("Observed algal concentration")
+axis.Date(1,format="%Y"); axis(2,at=1:n,names(pavec),las=2); box()
+abline(v=as.Date(paste(2018:2023,"01-01",sep="-")), lty=2)
+```
+
+
+```{r}
+xrange <- c(0,max(cmat))
+nbreaks <- 11
+breaks <- seq(from=xrange[1], to=xrange[2], length=nbreaks)
+colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
+t <- 1
+t <- 53
+week <- tvec[t]
+plot((nydia_sf %>% mutate(concentration=cmat[t,]))['concentration'], 
+     pal=colvec,breaks=breaks,
+     main=paste0("Algal concentration in Week ",week),reset=FALSE)
+```
+
+```{r}
+t <- 1
+#for(t in 1:nt) {
+for(t in 70:100) {
+  week <- tvec[t]
+  plot((nydia_sf %>% mutate(concentration=cmat[t,]))['concentration'], 
+     pal=colvec,breaks=breaks,
+     main=paste0("Algal concentration in Week ",week),reset=FALSE)
+}
+```
+
+
 
 
 
