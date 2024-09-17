@@ -75,10 +75,27 @@ source("setup.R")
    ($\tau_0$ is low), and $\tau_1$ is the probability of the persistence of that epoch.
    
    (Q: do we need spatial autocorrelation as well?  how can we include covariates?)
+
+ * Growth rate in polygon $i$ at time $t$
+   \[
+      Q_{it} = \exp\left( -\gamma(1-E_t) 
+                          + E_t(\alpha + {\bf x}_{it}^T{\beta}_2 + \lambda_2\log R_{it}) 
+                   \right)
+   \]
+   If $E_t=1$ we have growth ($\alpha>0$, $\lambda_2>0$) and if $E_t=0$ we have
+   decay ($\gamma>0$).
+ * Carrying parameter of polygon $i$ at time $t$
+   \[
+      K_{it} = V_i \rho_c R_i^{\lambda_c} = V_i e^{\alpha_c + \lambda_c \log R_{it}}
+   \]
+   Note that a polygon with zero residency cannot retain mass in this model.
    
+   The carrying capacity of the polygon is $M_{c,it}=K_{it}(Q_{it}-1)/Q_{it}$
+
  * $\pi_{it}$ bloom initiation probability in polygon $i$ at time $t$
    \[
-      \logit(\pi_{it}) = \frac{A_i}{a_0}\left[\mu_0 + {\bf x}_{it}^T{\beta}_0 + \lambda_0 \logit(R_{it})\right]
+      \logit(\pi_{it}) = \frac{A_i}{a_0}\left[\mu_0 + {\bf x}_{it}^T{\beta}_0 
+                         + \lambda_0 \log(R_{it})\right]
    \]
 
  * At time step $t$ in each polygon $i$ the innovation indicator is drawn

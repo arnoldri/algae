@@ -3,9 +3,9 @@ title: "eDNA"
 author: "Richard Arnold"
 date: '2024-07-16'
 output:
-  pdf_document: default
   html_document:
     code_folding: hide
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -13,6 +13,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Detection of eDNA
+
+```{r fig.wideth="80%", fig.cap="ddPCR estimation of concentration"}
+knitr::include_graphics("fig/ddPCR.png")
+```
+
 
  * A volume $V_S$ of water is collected, and all of the eDNA it contains is collected by filtration.
    Assume a count $N_j$ of eDNA fragments of type $j$ is collected ($j=1,\ldots,J$). 
@@ -55,7 +60,7 @@ knitr::opts_chunk$set(echo = TRUE)
    droplets are amplified and tested for the presence of the eDNA.  
 
 This process is aimed at determining $\nu_j$, the original number density in the water
-from which the sample was collected.  A simple estimate of $\mu_j$ is 
+from which the sample was collected.  A simple estimate of $\nu_j$ is 
 \[
    \widehat{\nu}_j = -\frac{V_M m}{V_SV_T} \log\left(1-\frac{m_{j+}}{m}\right)
 \]
