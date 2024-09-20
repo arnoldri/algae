@@ -65,6 +65,11 @@ source("setup.R")
  * $R_{it} \equiv P_{iit}$ = proportion of mass remaining resident in polygon $i$ in week $t$
  * ${\bf x}_{it}$ covariates in polygon $i$ at time $t$ (temperature, salinity, etc.)
  
+ * Polygon carrying capacity
+   \[
+      M_{cit} = V_i e^{\alpha_c + {\bf x}_{it}^T\beta_c + \lambda_c\log R_{it}}
+   \]
+
  * At time step $t$ the epoch indicator $E_t|E_{t-1}$ is drawn
    \begin{eqnarray*}
       E_0           &\sim& \text{Bernoulli}(\mbox{$\frac12$})\\
@@ -78,19 +83,12 @@ source("setup.R")
 
  * Growth rate in polygon $i$ at time $t$
    \[
-      Q_{it} = \exp\left( -\gamma(1-E_t) 
+      Q_{it} = e^{ -\gamma(1-E_t) 
                           + E_t(\alpha + {\bf x}_{it}^T{\beta}_2 + \lambda_2\log R_{it}) 
-                   \right)
+      }
    \]
    If $E_t=1$ we have growth ($\alpha>0$, $\lambda_2>0$) and if $E_t=0$ we have
    decay ($\gamma>0$).
- * Carrying parameter of polygon $i$ at time $t$
-   \[
-      K_{it} = V_i \rho_c R_i^{\lambda_c} = V_i e^{\alpha_c + \lambda_c \log R_{it}}
-   \]
-   Note that a polygon with zero residency cannot retain mass in this model.
-   
-   The carrying capacity of the polygon is $M_{c,it}=K_{it}(Q_{it}-1)/Q_{it}$
 
  * $\pi_{it}$ bloom initiation probability in polygon $i$ at time $t$
    \[
@@ -111,14 +109,16 @@ source("setup.R")
    \end{eqnarray*}
    $\delta_0$ is a point mass at zero: we get no new biomass if $I_{it}=0$.
  * Baseline algal mass distribution $M_{i0}=0$ for all $i$: i.e. no mass at time $t=0$.
- * Time evolution of algal mass $M_{it}$ for $t>0$
+ * Time evolution of algal mass $M_{it}$ for $t>0$: first compute the transported/innovation
+   biomass
    \[
-      M_{it} = e^{\eta_{it}}\left[
-               B_{it} + e^{-\gamma (1-E_t) + E_t(\alpha + {\bf x}_{it}^T{\beta}_2 + \lambda_2 \logit R_{it})}
-                        \sum_{j=1}^n P_{ijt} 
+      M_{dit} = B_{it} + \sum_{j=1}^n P_{ijt} 
                                      e^{E_t({\bf x}_{jt}^T{\beta}_1 + \lambda_1 \logit R_{jt})}
                                      M_{j,t-1}
-               \right]
+   \]
+ * Then
+   \[
+      M_{it} = e^{\eta_{it}} M_{dit}\left[ Q_{it} + (1-Q_{it})\frac{M_{dit}}{M_{cit}} \right]
    \]
    where
    \[
