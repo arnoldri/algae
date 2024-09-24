@@ -101,3 +101,23 @@ block01 <- function(tvec,vvec,addheadtail=TRUE) {
   }
   return(aa)
 }
+
+############################################################
+#' @export
+find.events <- function(xmat, quantile.threshold=0.75) {
+  # find locations where there is a peak in the maximum value of the
+  # rows in the matrix xmat
+  nt <- nrow(xmat)
+  xx <- apply(xmat,1,max)
+  uq <- quantile(xx,probs=quantile.threshold)
+  idx1 <- (1:nt)[xx>uq]
+  dd <- diff(idx1)
+  idx2a <- idx1[c(Inf,dd)>1]
+  idx2b <- idx1[c(dd,Inf)>1]
+  xmax <- apply(cbind(idx2a,idx2b),1, function(ii) max(xx[ii[1]:ii[2]]))
+  data.frame(event=1:length(idx2a),
+             istart=idx2a, iend=idx2b,
+             xmax=xmax)
+}
+############################################################
+
