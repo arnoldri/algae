@@ -80,7 +80,10 @@ seasonfunc <- function(week) {
   as.numeric(format(week.as.date(week), "%m")) %in% c(12,1,2,3,4,5,6,7)
 }
 
-
+#' Make a step function from vector vvec:
+#' Insert zero values when there is a transition
+#' from a zero to one, or the reverse.
+#'
 #' @export
 block01 <- function(tvec,vvec,addheadtail=TRUE) {
   aa <- cbind(tvec,vvec)
@@ -120,4 +123,183 @@ find.events <- function(xmat, quantile.threshold=0.75) {
              xmax=xmax)
 }
 ############################################################
+sfreset <- function() invisible(dev.off())
+
+plot.sobj <- function(sobj, type="polygons") {
+  if(type=="polygons") {
+    plot((sobj$polysf %>% st_geometry()), main=arealabel,reset=FALSE)
+    text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
+         lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.5, col="black")
+  } else if(type=="volume") {
+    plot((sobj$polysf %>% select(volume_15)), main="Polygon Volumes to 15m")
+  } else if(type=="retention") {
+    plot((sobj$polysf %>% select(retention)), main="Polygon 1 week retention")
+  } else if(type=="residency") {
+    plot((sobj$polysf %>% select(residency)), main="Polygon 1 week residency")
+  } else if(type=="communication") {
+    image(1:sobj$npoly, 1:sobj$npoly, sobj$pmat, axes=FALSE, xlab="Destination", ylab="Source",
+          main="Communication between polygons",asp=1)
+    axis(1,at=1:sobj$npoly,lab=sobj$polyid,las=2,cex.axis=0.7)
+    axis(2,at=1:sobj$npoly,lab=sobj$polyid,las=2,cex.axis=0.7)
+    box()
+  } else {
+    invisible()
+  }
+  invisible()
+}
+do.sim <- function(sobj, tlist, parlist) {
+  simlist <- list()
+
+  # Epochs
+  evec <- rep(0,tlist$nt)
+  evec[1] <- rbinom(1,1,parlist$tau0*tlist$seasonvec[1])
+  for(i in 2:tlist$nt) {
+    evec[i] <- if(evec[i-1]==0) rbinom(1,1,parlist$tau0*tlist$seasonvec[i]) else rbinom(1,1,parlist$tau1*tlist$seasonvec[i])
+  }
+  simlist$evec <- evec
+
+  # Bloom initiation probability
+  pavec <- sobj$polysf$volume_15*exp(parlist$alpha0 + parlist$lambda0*log(sobj$polysf$residency))
+  simlist$pavec <- pavec
+
+  # Time dependent bloom initiation probabilities
+  pimat <- outer(seasonvec*evec,pavec)
+  colnames(pimat) <- names(pavec)
+  # Innovation indicator
+  imat <- array(rbinom(length(pimat),1,pimat),dim=dim(pimat))
+  colnames(imat) <- names(pavec)
+  simlist$pimat <- pimat
+  simlist$imat <- imat
+
+  # Biomass innovation
+  btmat <- array(rgamma(prod(dim(pimat)),abio,bbio),dim=dim(pimat))
+  btmat <- imat*btmat
+  simlist$btmat <- btmat
+
+  # Mass evolution
+  # growth matrix
+  qmat <- array(NA,dim=dim(pimat))
+  # transported mass matrix
+  dmat <- array(NA,dim=dim(pimat))
+  # final mass matrix
+  mmat <- array(0,dim=dim(pimat))
+  # final density matrix
+  cmat <- mmat
+  # initiation
+  mmat[1,] <- btmat[1,]
+  cmat[1,] <- mmat[1,]/volvec
+  qmat[1,] <- 1
+  dmat[1,] <- 0
+
+  volvec <- sobj$polysf$volume_15
+  resvec <- sobj$resvec
+  rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
+  mcvec <- volvec*rhocvec
+  # post-transport variation
+  etamat <- array(rnorm(prod(dim(pimat)),0,parlist$sigma.eta),dim=dim(pimat))
+  for(t in 2:nt) {
+    # growth rate
+    qvec <- exp(-parlist$gamma2*(1-evec[t]) + evec[t]*(parlist$alpha2+parlist$lambda2*log(sobj$resvec)))
+    # pre-transport growth
+    gvec <- exp(evec[t]*parlist$lambda1*log(sobj$resvec))
+    # transported mass
+    dvec <- btmat[t,] + sobj$pmat%*%diag(gvec)%*%mmat[t-1,]
+    # final grown mass with post-transport variation
+    mvec <- exp(etamat[t,])*mcvec*(1-exp(-qvec*dvec/mcvec))
+    # store
+    mmat[t,] <- mvec
+    cmat[t,] <- mmat[t,]/volvec
+    dmat[t,] <- dvec
+    qmat[t,] <- qvec
+  }
+  # observed concentration
+  ymat <- array(exp(rnorm(prod(dim(cmat)),0,sigma.logy)),dim=dim(pimat))
+  simlist <- c(simlist,list(mmat=mmat,cmat=cmat,dmat=dmat,qmat=qmat))
+
+  return(simlist)
+}
+plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch") {
+  if(type=="epoch") {
+    plot(week.as.date(tlist$tvec), tlist$seasonvec, type="s", col="grey",
+         xlab="Date", ylab="Bloom favourability",
+         main="Bloom epochs", axes=FALSE)
+    bb <- block01(tlist$tvec,tlist$seasonvec)
+    polygon(week.as.date(bb[,1]), bb[,2], col="grey")
+    lines(week.as.date(tlist$tvec), simlist$evec, type="s")
+    bb <- block01(tlist$tvec,simlist$evec)
+    polygon(week.as.date(bb[,1]),bb[,2], col="orange")
+    #polygon(week.as.date(c(tvec[1],tvec,tvec[length(tvec)])), c(0,evec,0), col="orange")
+    axis.Date(1); axis(2,at=c(0,1)); box()
+  } else if(type=="carrying.density") {
+    volvec <- sobj$polysf$volume_15
+    rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
+    plot(sobj$resvec, rhocvec, xlab="Residency", ylab=expression("Polygon carrying density: "*rho[cit]),
+         main="Polygon carrying density", pch=" "); text(resvec, rhocvec, lab=names(resvec), cex=0.6)
+  } else if(type=="map.carrying.density") {
+    volvec <- sobj$polysf$volume_15
+    rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
+    plot((sobj$polysf %>% mutate(rhoc=rhocvec))['rhoc'], main="Carrying density",reset=FALSE)
+    text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
+         lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.6, col="white")
+  } else if(type=="carrying.mass") {
+    volvec <- sobj$polysf$volume_15
+    rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
+    mcvec <- volvec*rhocvec
+    plot(sobj$resvec, mcvec, xlab="Residency", ylab=expression("Polygon carrying density: "*M[cit]),
+         main="Polygon carrying mass", pch=" ");
+    text(sobj$resvec, mcvec, lab=names(sobj$resvec), cex=0.6)
+  } else if(type=="map.carrying.mass") {
+    volvec <- sobj$polysf$volume_15
+    rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
+    mcvec <- volvec*rhocvec
+    plot((sobj$polysf %>% mutate(mc=mcvec))['mc'], main="Carrying mass",reset=FALSE)
+    text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
+         lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.6, col="white")
+  } else if(type=="bloom.initiation.probability") {
+    pavec <- sobj$polysf$volume_15*exp(parlist$alpha0 + parlist$lambda0*log(sobj$resvec))
+    plot(sobj$resvec, pavec, xlab="Residency", ylab=expression("Bloom initiation probability: "*pi[it]),
+         main="Bloom initiation probability", pch=" ");
+    text(sobj$resvec, pavec, lab=names(sobj$resvec), cex=0.6)
+  } else if(type=="map.bloom.initiation.probability") {
+    pavec <- sobj$polysf$volume_15*exp(parlist$alpha0 + parlist$lambda0*log(sobj$resvec))
+    plot((sobj$polysf %>% mutate(pa=pavec))['pa'], main="Bloom initiation probability", reset=FALSE)
+    text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
+         lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.6, col="white")
+  } else if(type=="map.number.of.initiations") {
+    nivec <- apply(simlist$imat,2,sum)
+    breaks <- -0.5+0:(1+max(nivec))
+    plot((sobj$polysf %>% mutate(nstart=nivec))['nstart'],
+         main="Number of initiations", reset=FALSE, breaks=breaks)
+    text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
+         lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.6, col="white")
+  } else if(type=="bloom.initiation.times") {
+    image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$imat, axes=FALSE, xlab="Week", ylab="Polygon")
+    title("Bloom initiation")
+    axis.Date(1); axis(2,at=1:n,lab=names(simlist$pavec), las=2); box()
+    abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+  } else if(type=="innovation.biomass") {
+    image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$btmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    title("Innovation biomass")
+    axis.Date(1,format="%Y"); axis(2,at=1:n,names(simlist$pavec),las=2); box()
+    abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+  } else if(type=="biomass.over.time") {
+    image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$mmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    title("Algal biomass")
+    axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
+    abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+  } else if(type=="concentration.over.time") {
+    image(week.as.date(tvec), 1:n, cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    title("Algal concentration")
+    axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
+    abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+  } else if(type=="observed.concentration.over.time") {
+    image(week.as.date(tvec), 1:n, cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    title("Observed algal concentration")
+    axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
+    abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+  } else {
+    invisible()
+  }
+  invisible()
+}
 
