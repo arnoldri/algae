@@ -111,8 +111,8 @@ find.events <- function(xmat, quantile.threshold=0.75) {
   # find locations where there is a peak in the maximum value of the
   # rows in the matrix xmat
   nt <- nrow(xmat)
-  xx <- apply(xmat,1,max)
-  uq <- quantile(xx,probs=quantile.threshold)
+  xx <- apply(xmat,1,max,na.rm=TRUE)
+  uq <- quantile(xx,probs=quantile.threshold,na.rm=TRUE)
   idx1 <- (1:nt)[xx>uq]
   dd <- diff(idx1)
   idx2a <- idx1[c(Inf,dd)>1]
@@ -123,15 +123,51 @@ find.events <- function(xmat, quantile.threshold=0.75) {
              xmax=xmax)
 }
 ############################################################
+#' Reset the current device - needed after some mapping images
+#'
+#' @export
 sfreset <- function() invisible(dev.off())
 
-plot.sobj <- function(sobj, datalist, type="polygons",
+make.datlist <- function(sobj, eventdat, monitorid) {
+  datlist <- list(event=eventdat, monitorid=monitorid)
+
+  week1 <- min(eventdat$week)
+  week2 <- max(eventdat$week)
+  tvec <- week1:week2
+  nt <- length(tvec)
+  datevec <- week.as.date(tvec)
+  year1 <-as.numeric(format(datevec[1],"%Y"))
+  year2 <-as.numeric(format(datevec[nt],"%Y"))
+
+  polyid <- sort(unique(eventdat$polyid))
+  cpolyid <- as.character(polyid)
+  npoly <- length(polyid)
+  poly.idx <- match(polyid,sobj$polysf$polyid)
+
+  cmat <- array(NA,dim=c(nt,npoly))
+  dimnames(cmat) <- list(tvec, polyid)
+  cmat[cbind(match(eventdat$week, tvec),
+             match(eventdat$polyid, colnames(cmat)))] <- eventdat$Value
+  ievents <- find.events(cmat)
+  ievents$weekstart <- tvec[ievents$istart]
+  ievents$weekend <- tvec[ievents$iend]
+
+  datlist <- list(event=eventdat, monitorid=monitorid,
+                  nt=nt, tvec=tvec, datevec=datevec,
+                  week1=week1, year1=year1, year2=year2,
+                  npoly=npoly, polyid=polyid, cpolyid=cpolyid,
+                  poly.idx=poly.idx,
+                  cmat=cmat, ievents=ievents)
+  return(datlist)
+}
+
+plot.sobj <- function(sobj, datlist, type="polygons",
                       fill.coast=TRUE, coast.col="dark green") {
 
   if(type=="polygons") {
     plot((sobj$polysf %>% st_geometry()), main=arealabel,reset=FALSE)
     text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
-         lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.5, col="black")
+         lab=unlist((sobj$polysf %>% st_drop_geometry())['polyid']), cex=0.5, col="black")
     if(fill.coast) plot(st_geometry(sobj$coastsf), col=coast.col, add=TRUE)
 
   } else if(type=="volume") {
@@ -159,7 +195,7 @@ plot.sobj <- function(sobj, datalist, type="polygons",
   invisible()
 }
 
-do.sim <- function(sobj, tlist, parlist, datalist) {
+do.sim <- function(sobj, tlist, parlist, datlist) {
   simlist <- list()
 
   # Volume and residency
@@ -169,36 +205,37 @@ do.sim <- function(sobj, tlist, parlist, datalist) {
   # Epochs
   evec <- rep(0,tlist$nt)
   evec[1] <- rbinom(1,1,parlist$tau0*tlist$seasonvec[1])
-  for(i in 2:tlist$nt) {
-    evec[i] <- if(evec[i-1]==0) rbinom(1,1,parlist$tau0*tlist$seasonvec[i]) else rbinom(1,1,parlist$tau1*tlist$seasonvec[i])
+  for(it in 2:tlist$nt) {
+    evec[it] <- if(evec[it-1]==0) rbinom(1,1,parlist$tau0*tlist$seasonvec[it]) else rbinom(1,1,parlist$tau1*tlist$seasonvec[it])
   }
   simlist$evec <- evec
 
   # Bloom initiation probability
-  pavec <- sobj$polysf$volume_15*exp(parlist$alpha0 + parlist$lambda0*log(sobj$polysf$residency))
+  pavec <- volvec*exp(parlist$alpha0 + parlist$lambda0*log(resvec))
   simlist$pavec <- pavec
 
   # Time dependent bloom initiation probabilities
   pimat <- outer(seasonvec*evec,pavec)
-  colnames(pimat) <- names(pavec)
+  dimnames(pimat) <- list(tlist$tvec, sobj$polyid)
   # Innovation indicator
   imat <- array(rbinom(length(pimat),1,pimat),dim=dim(pimat))
-  colnames(imat) <- names(pavec)
+  dimnames(imat) <- dimnames(pimat)
   simlist$pimat <- pimat
   simlist$imat <- imat
 
   # Biomass innovation
   btmat <- array(rgamma(prod(dim(pimat)),abio,bbio),dim=dim(pimat))
   btmat <- imat*btmat
+  dimnames(btmat) <- dimnames(pimat)
   simlist$btmat <- btmat
 
   # Mass evolution
   # growth matrix
-  qmat <- array(NA,dim=dim(pimat))
+  qmat <- array(NA,dim=dim(pimat),dimnames=dimnames(pimat))
   # transported mass matrix
-  dmat <- array(NA,dim=dim(pimat))
+  dmat <- array(NA,dim=dim(pimat),dimnames=dimnames(pimat))
   # final mass matrix
-  mmat <- array(0,dim=dim(pimat))
+  mmat <- array(0,dim=dim(pimat),dimnames=dimnames(pimat))
   # final density matrix
   cmat <- mmat
   # initiation
@@ -207,35 +244,39 @@ do.sim <- function(sobj, tlist, parlist, datalist) {
   qmat[1,] <- 1
   dmat[1,] <- 0
 
-  rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
+  rhocvec <- exp(parlist$alphac + parlist$lambdac*log(resvec))
   mcvec <- volvec*rhocvec
   # post-transport variation
   etamat <- array(rnorm(prod(dim(pimat)),0,parlist$sigma.eta),dim=dim(pimat))
-  for(t in 2:nt) {
+  for(it in 2:nt) {
     # growth rate
-    qvec <- exp(-parlist$gamma2*(1-evec[t]) + evec[t]*(parlist$alpha2+parlist$lambda2*log(sobj$resvec)))
+    qvec <- exp(-parlist$gamma2*(1-evec[it]) + evec[it]*(parlist$alpha2+parlist$lambda2*log(sobj$resvec)))
     # pre-transport growth
-    gvec <- exp(evec[t]*parlist$lambda1*log(sobj$resvec))
+    gvec <- exp(evec[it]*parlist$lambda1*log(sobj$resvec))
     # transported mass
-    dvec <- btmat[t,] + sobj$pmat%*%diag(gvec)%*%mmat[t-1,]
+    dvec <- btmat[it,] + sobj$pmat%*%diag(gvec)%*%mmat[it-1,]
     # final grown mass with post-transport variation
-    mvec <- exp(etamat[t,])*mcvec*(1-exp(-qvec*dvec/mcvec))
+    mvec <- exp(etamat[it,])*mcvec*(1-exp(-qvec*dvec/mcvec))
     # store
-    mmat[t,] <- mvec
-    cmat[t,] <- mmat[t,]/volvec
-    dmat[t,] <- dvec
-    qmat[t,] <- qvec
+    mmat[it,] <- mvec
+    cmat[it,] <- mmat[it,]/volvec
+    dmat[it,] <- dvec
+    qmat[it,] <- qvec
   }
   ievents <- find.events(cmat)
+  ievents$weekstart <- tlist$tvec[ievents$istart]
+  ievents$weekend <- tlist$tvec[ievents$iend]
 
   # observed concentration
   ymat <- array(exp(rnorm(prod(dim(cmat)),0,sigma.logy)),dim=dim(pimat))
-  simlist <- c(simlist,list(mmat=mmat,cmat=cmat,dmat=dmat,qmat=qmat,ievents=ievents))
+  dimnames(ymat) <- dimnames(cmat)
+  simlist <- c(simlist,list(mmat=mmat,cmat=cmat,dmat=dmat,qmat=qmat,
+                            ymat=ymat,ievents=ievents))
   return(simlist)
 }
 
-plot.sim <- function(simlist, sobj, tlist, parlist, datalist, type="epoch",
-                     monitored=FALSE, logscale=FALSE, date.axis=TRUE,
+plot.sim <- function(simlist, sobj, tlist, parlist, datlist, type="epoch",
+                     monitored=FALSE, logscale=FALSE, logoffset=1, date.axis=TRUE,
                      fill.coast=TRUE, coast.col="dark green",
                      colvec=NULL, crange=NULL, it1=NULL, it2=NULL, w1=NULL, w2=NULL,
                      make.movie=FALSE, movie.name="movie", movie.rootdir="ignore/",
@@ -325,7 +366,7 @@ plot.sim <- function(simlist, sobj, tlist, parlist, datalist, type="epoch",
     abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
 
   } else if(type=="observed.concentration.over.time") {
-    image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$ymat, axes=FALSE, xlab="Week", ylab="Polygon")
     title("Observed algal concentration")
     axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
     abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
@@ -393,7 +434,7 @@ plot.sim <- function(simlist, sobj, tlist, parlist, datalist, type="epoch",
 }
 
 
-plot.data <- function(sobj, datalist, type="epoch",
+plot.data <- function(sobj, datlist, type="epoch",
                       logscale=FALSE, date.axis=TRUE,
                       fill.coast=TRUE, coast.col="dark green",
                       colvec=NULL, crange=NULL, it1=NULL, it2=NULL, w1=NULL, w2=NULL,
@@ -401,20 +442,20 @@ plot.data <- function(sobj, datalist, type="epoch",
                       movie.fps=20, movie.clean=TRUE) {
 
   if(type=="observed.concentration.over.time") {
-    image(week.as.date(datalist$tvec), 1:datalist$npoly, datalist$cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    image(week.as.date(datlist$tvec), 1:datlist$npoly, datlist$cmat, axes=FALSE, xlab="Week", ylab="Polygon")
     title("Observed algal concentration")
-    axis.Date(1,format="%Y"); axis(2,at=1:datalist$npoly,datalist$polyid,las=2); box()
-    abline(v=as.Date(paste(datalist$year1:datalist$year2,"01-01",sep="-")), lty=2)
+    axis.Date(1,format="%Y"); axis(2,at=1:datlist$npoly,datlist$polyid,las=2); box()
+    abline(v=as.Date(paste(datlist$year1:datlist$year2,"01-01",sep="-")), lty=2)
 
   } else if(type=="map.concentration") {
 
-    if(is.null(it1)) it1 <- which(datalist$tvec==w1)
+    if(is.null(it1)) it1 <- which(datlist$tvec==w1)
     if(is.null(it2)) {
-      if(is.null(w2)) it2 <- it1 else it2 <- which(datalist$tvec==w2)
+      if(is.null(w2)) it2 <- it1 else it2 <- which(datlist$tvec==w2)
     }
     if(is.null(colvec)) {
       if(is.null(crange)) {
-        crange <- c(0,max(datalist$cmat,na.rm=TRUE))
+        crange <- c(0,max(datlist$cmat,na.rm=TRUE))
         if(diff(crange)==0) crange <- c(0,1)
       }
       nbreaks <- 11
@@ -436,15 +477,15 @@ plot.data <- function(sobj, datalist, type="epoch",
         par(mar=1.1*c(2.5,1,4.1,4.1))
       }
       week <- tlist$tvec[it]
-      plot((sobj$polysf[datalist$poly.idx,] %>%
-              mutate(concentration=datalist$cmat[it,]))['concentration'],
+      plot((sobj$polysf[datlist$poly.idx,] %>%
+              mutate(concentration=datlist$cmat[it,]))['concentration'],
            pal=colvec,breaks=breaks,
            main=paste0("Observed algal concentration in Week ",week),reset=FALSE)
       if(fill.coast) plot(st_geometry(sobj$coastsf), col=coast.col, add=TRUE)
       if(make.movie) {
         box()
         if(date.axis) {
-          par(usr=c(as.numeric(week.as.date(datalist$tvec[c(it1,it2)])),0,1))
+          par(usr=c(as.numeric(week.as.date(datlist$tvec[c(it1,it2)])),0,1))
           axis.Date(1)
           points(week.as.date(week),0,pch=16,cex=2,xpd=TRUE)
         }
