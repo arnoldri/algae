@@ -974,6 +974,29 @@ for(t in (max(1,ii$istart[im]-2)):(min(nt,ii$iend[im]+2))) {
 
 ### General case
 
+```{r error=FALSE, warning=FALSE, message=FALSE}
+# Packages + set up
+load("opar.Rda")
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(maps)
+library(sf)
+library(geojsonsf)
+library(rmapshaper)
+library(magick)
+library(colorspace)
+library(kableExtra)
+
+library(algae)
+source("funcs.R")
+source("maps.R")
+source("setup.R")
+```
+
 Requirements
 
 * Polygon -sf object, with $n$ polygons
@@ -1059,7 +1082,6 @@ sigma.eta <- 0.03
 # observation error
 sigma.logy <- 0.03
 
-
 parlist <- list(tau0=tau0, tau1=tau1,
                 alphac=alphac, lambdac=lambdac,
                 alpha0=alpha0, lambda0=lambda0,
@@ -1070,8 +1092,11 @@ parlist <- list(tau0=tau0, tau1=tau1,
                 sigma.eta=sigma.eta, sigma.logy=sigma.logy)
 ```
 
-
 ```{r}
+plot(week.as.date(tvec), seasonvec, type="s", xlab="", ylab="Season", axes=FALSE)
+title("Summer Seasons")
+#axis.Date(1,format="%b %Y", las=2); axis(2); box()
+axis.Date(1,format="%Y", las=1); axis(2); box()
 ```
 
 ```{r warning=FALSE}
@@ -1082,13 +1107,6 @@ plot.sobj(sobj, type="residency")
 plot.sobj(sobj, type="communication")
 ```
 
-
-```{r}
-plot(week.as.date(tvec), seasonvec, type="s", xlab="", ylab="Season", axes=FALSE)
-title("Summer Seasons")
-#axis.Date(1,format="%b %Y", las=2); axis(2); box()
-axis.Date(1,format="%Y", las=1); axis(2); box()
-```
 
 Simulation 
 
@@ -1113,8 +1131,13 @@ plot.sim(simlist, sobj, tlist, parlist, type="concentration.over.time")
 plot.sim(simlist, sobj, tlist, parlist, type="observed.concentration.over.time")
 plot(tvec,apply(simlist$cmat,1,max), xlab="Week", ylab="Maxmimum observed concentration",
      main="Maximum concentration"); lines(tvec, apply(simlist$cmat,1,max))
+abline(v=tvec[simlist$ievent$istart],col="green")
+abline(v=tvec[simlist$ievent$iend],col="red")
 ```
 
+```{r}
+plot.sim(simlist, sobj, tlist, parlist, type="map.concentration",t1=1,t2=5)
+```
 ```{r}
 xrange <- c(0,max(simlist$cmat))
 nbreaks <- 11
@@ -1123,7 +1146,7 @@ colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
 t <- 1
 t <- 53
 week <- tvec[t]
-plot((all_sf %>% mutate(concentration=cmat[t,]))['concentration'], 
+plot((sobj$polysf %>% mutate(concentration=simlist$cmat[t,]))['concentration'], 
      pal=colvec,breaks=breaks,
      main=paste0("Algal concentration in Week ",week),reset=FALSE)
 ```

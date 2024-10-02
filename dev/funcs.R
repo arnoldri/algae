@@ -212,13 +212,16 @@ do.sim <- function(sobj, tlist, parlist) {
     dmat[t,] <- dvec
     qmat[t,] <- qvec
   }
+  ievents <- find.events(cmat)
+
   # observed concentration
   ymat <- array(exp(rnorm(prod(dim(cmat)),0,sigma.logy)),dim=dim(pimat))
-  simlist <- c(simlist,list(mmat=mmat,cmat=cmat,dmat=dmat,qmat=qmat))
-
+  simlist <- c(simlist,list(mmat=mmat,cmat=cmat,dmat=dmat,qmat=qmat,ievents=ievents))
   return(simlist)
 }
-plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch") {
+plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch",
+                     colvec=NULL, crange=NULL, t1=NULL, t2=NULL, w1=NULL, w2=NULL,
+                     make.movie=FALSE, movie.name="movie", movie.rootdir="ignore/") {
   if(type=="epoch") {
     plot(week.as.date(tlist$tvec), tlist$seasonvec, type="s", col="grey",
          xlab="Date", ylab="Bloom favourability",
@@ -297,6 +300,33 @@ plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch") {
     title("Observed algal concentration")
     axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
     abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+  } else if(type=="map.concentration") {
+    if(is.null(t1)) t1 <- which(tlist$tvec==w1)
+    if(is.null(t2)) {
+      if(is.null(w2)) t2 <- t1 else t2 <- which(tlist$tvec==w2)
+    }
+    if(is.null(colvec)) {
+       if(is.null(crange)) {
+         ##crange <- c(0,max(simlist$cmat[t1:t2,]))
+         crange <- c(0,max(simlist$cmat))
+         if(diff(crange)==0) crange <- c(0,1)
+       }
+       nbreaks <- 11
+       breaks <- seq(from=crange[1], to=crange[2], length=nbreaks)
+       colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
+    }
+    if(make.movie) {
+      odir <- paste0(movie.rootdir,"/",movie.name,"/")
+      par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
+      fstem <- movie.name
+      fmovie <- paste0(movie.rootdir,"/",movie.name,".gif")
+    }
+    for(t in t1:t2) {
+       week <- tlist$tvec[t1]
+       plot((sobj$polysf %>% mutate(concentration=simlist$cmat[t1,]))['concentration'],
+            pal=colvec,breaks=breaks,
+            main=paste0("Algal concentration in Week ",week),reset=FALSE)
+    }
   } else {
     invisible()
   }
