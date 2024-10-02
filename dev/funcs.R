@@ -125,30 +125,46 @@ find.events <- function(xmat, quantile.threshold=0.75) {
 ############################################################
 sfreset <- function() invisible(dev.off())
 
-plot.sobj <- function(sobj, type="polygons") {
+plot.sobj <- function(sobj, datalist, type="polygons",
+                      fill.coast=TRUE, coast.col="dark green") {
+
   if(type=="polygons") {
     plot((sobj$polysf %>% st_geometry()), main=arealabel,reset=FALSE)
     text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
          lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.5, col="black")
+    if(fill.coast) plot(st_geometry(sobj$coastsf), col=coast.col, add=TRUE)
+
   } else if(type=="volume") {
-    plot((sobj$polysf %>% select(volume_15)), main="Polygon Volumes to 15m")
+    plot((sobj$polysf %>% select(volume_15)), main="Polygon Volumes to 15m", reset=FALSE)
+    if(fill.coast) plot(st_geometry(sobj$coastsf), col=coast.col, add=TRUE)
+
   } else if(type=="retention") {
-    plot((sobj$polysf %>% select(retention)), main="Polygon 1 week retention")
+    plot((sobj$polysf %>% select(retention)), main="Polygon 1 week retention", reset=FALSE)
+    if(fill.coast) plot(st_geometry(sobj$coastsf), col=coast.col, add=TRUE)
+
   } else if(type=="residency") {
-    plot((sobj$polysf %>% select(residency)), main="Polygon 1 week residency")
+    plot((sobj$polysf %>% select(residency)), main="Polygon 1 week residency", reset=FALSE)
+    if(fill.coast) plot(st_geometry(sobj$coastsf), col=coast.col, add=TRUE)
+
   } else if(type=="communication") {
     image(1:sobj$npoly, 1:sobj$npoly, sobj$pmat, axes=FALSE, xlab="Destination", ylab="Source",
           main="Communication between polygons",asp=1)
     axis(1,at=1:sobj$npoly,lab=sobj$polyid,las=2,cex.axis=0.7)
     axis(2,at=1:sobj$npoly,lab=sobj$polyid,las=2,cex.axis=0.7)
     box()
+
   } else {
-    invisible()
+    warning(paste0("Plot type ",type," not recognised."))
   }
   invisible()
 }
-do.sim <- function(sobj, tlist, parlist) {
+
+do.sim <- function(sobj, tlist, parlist, datalist) {
   simlist <- list()
+
+  # Volume and residency
+  volvec <- sobj$volvec
+  resvec <- sobj$resvec
 
   # Epochs
   evec <- rep(0,tlist$nt)
@@ -187,12 +203,10 @@ do.sim <- function(sobj, tlist, parlist) {
   cmat <- mmat
   # initiation
   mmat[1,] <- btmat[1,]
-  cmat[1,] <- mmat[1,]/volvec
+  cmat[1,] <- mmat[1,]/sobj$volvec
   qmat[1,] <- 1
   dmat[1,] <- 0
 
-  volvec <- sobj$polysf$volume_15
-  resvec <- sobj$resvec
   rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
   mcvec <- volvec*rhocvec
   # post-transport variation
@@ -219,9 +233,13 @@ do.sim <- function(sobj, tlist, parlist) {
   simlist <- c(simlist,list(mmat=mmat,cmat=cmat,dmat=dmat,qmat=qmat,ievents=ievents))
   return(simlist)
 }
-plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch",
-                     colvec=NULL, crange=NULL, t1=NULL, t2=NULL, w1=NULL, w2=NULL,
-                     make.movie=FALSE, movie.name="movie", movie.rootdir="ignore/") {
+
+plot.sim <- function(simlist, sobj, tlist, parlist, datalist, type="epoch",
+                     monitored=FALSE, logscale=FALSE, date.axis=TRUE,
+                     fill.coast=TRUE, coast.col="dark green",
+                     colvec=NULL, crange=NULL, it1=NULL, it2=NULL, w1=NULL, w2=NULL,
+                     make.movie=FALSE, movie.name="movie", movie.rootdir="ignore/",
+                     movie.fps=20, movie.clean=TRUE) {
   if(type=="epoch") {
     plot(week.as.date(tlist$tvec), tlist$seasonvec, type="s", col="grey",
          xlab="Date", ylab="Bloom favourability",
@@ -231,19 +249,21 @@ plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch",
     lines(week.as.date(tlist$tvec), simlist$evec, type="s")
     bb <- block01(tlist$tvec,simlist$evec)
     polygon(week.as.date(bb[,1]),bb[,2], col="orange")
-    #polygon(week.as.date(c(tvec[1],tvec,tvec[length(tvec)])), c(0,evec,0), col="orange")
     axis.Date(1); axis(2,at=c(0,1)); box()
+
   } else if(type=="carrying.density") {
     volvec <- sobj$polysf$volume_15
     rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
     plot(sobj$resvec, rhocvec, xlab="Residency", ylab=expression("Polygon carrying density: "*rho[cit]),
          main="Polygon carrying density", pch=" "); text(resvec, rhocvec, lab=names(resvec), cex=0.6)
+
   } else if(type=="map.carrying.density") {
     volvec <- sobj$polysf$volume_15
     rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
     plot((sobj$polysf %>% mutate(rhoc=rhocvec))['rhoc'], main="Carrying density",reset=FALSE)
     text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
          lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.6, col="white")
+
   } else if(type=="carrying.mass") {
     volvec <- sobj$polysf$volume_15
     rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
@@ -251,6 +271,7 @@ plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch",
     plot(sobj$resvec, mcvec, xlab="Residency", ylab=expression("Polygon carrying density: "*M[cit]),
          main="Polygon carrying mass", pch=" ");
     text(sobj$resvec, mcvec, lab=names(sobj$resvec), cex=0.6)
+
   } else if(type=="map.carrying.mass") {
     volvec <- sobj$polysf$volume_15
     rhocvec <- exp(parlist$alphac + parlist$lambdac*log(sobj$resvec))
@@ -258,16 +279,19 @@ plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch",
     plot((sobj$polysf %>% mutate(mc=mcvec))['mc'], main="Carrying mass",reset=FALSE)
     text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
          lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.6, col="white")
+
   } else if(type=="bloom.initiation.probability") {
     pavec <- sobj$polysf$volume_15*exp(parlist$alpha0 + parlist$lambda0*log(sobj$resvec))
     plot(sobj$resvec, pavec, xlab="Residency", ylab=expression("Bloom initiation probability: "*pi[it]),
          main="Bloom initiation probability", pch=" ");
     text(sobj$resvec, pavec, lab=names(sobj$resvec), cex=0.6)
+
   } else if(type=="map.bloom.initiation.probability") {
     pavec <- sobj$polysf$volume_15*exp(parlist$alpha0 + parlist$lambda0*log(sobj$resvec))
     plot((sobj$polysf %>% mutate(pa=pavec))['pa'], main="Bloom initiation probability", reset=FALSE)
     text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
          lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.6, col="white")
+
   } else if(type=="map.number.of.initiations") {
     nivec <- apply(simlist$imat,2,sum)
     breaks <- -0.5+0:(1+max(nivec))
@@ -275,35 +299,41 @@ plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch",
          main="Number of initiations", reset=FALSE, breaks=breaks)
     text(sobj$polysf %>% st_centroid(of_largest_polygon=TRUE) %>% st_coordinates(),
          lab=as.character((sobj$polysf %>% st_drop_geometry())[,sobj$clusteridname]), cex=0.6, col="white")
+
   } else if(type=="bloom.initiation.times") {
     image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$imat, axes=FALSE, xlab="Week", ylab="Polygon")
     title("Bloom initiation")
-    axis.Date(1); axis(2,at=1:n,lab=names(simlist$pavec), las=2); box()
+    axis.Date(1); axis(2,at=1:sobj$npoly,lab=names(simlist$pavec), las=2); box()
     abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+
   } else if(type=="innovation.biomass") {
     image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$btmat, axes=FALSE, xlab="Week", ylab="Polygon")
     title("Innovation biomass")
-    axis.Date(1,format="%Y"); axis(2,at=1:n,names(simlist$pavec),las=2); box()
+    axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
     abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+
   } else if(type=="biomass.over.time") {
     image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$mmat, axes=FALSE, xlab="Week", ylab="Polygon")
     title("Algal biomass")
     axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
     abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+
   } else if(type=="concentration.over.time") {
-    image(week.as.date(tvec), 1:n, cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$cmat, axes=FALSE, xlab="Week", ylab="Polygon")
     title("Algal concentration")
     axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
     abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+
   } else if(type=="observed.concentration.over.time") {
-    image(week.as.date(tvec), 1:n, cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    image(week.as.date(tlist$tvec), 1:sobj$npoly, simlist$cmat, axes=FALSE, xlab="Week", ylab="Polygon")
     title("Observed algal concentration")
     axis.Date(1,format="%Y"); axis(2,at=1:sobj$npoly,names(simlist$pavec),las=2); box()
     abline(v=as.Date(paste(tlist$year1:tlist$year2,"01-01",sep="-")), lty=2)
+
   } else if(type=="map.concentration") {
-    if(is.null(t1)) t1 <- which(tlist$tvec==w1)
-    if(is.null(t2)) {
-      if(is.null(w2)) t2 <- t1 else t2 <- which(tlist$tvec==w2)
+    if(is.null(it1)) it1 <- which(tlist$tvec==w1)
+    if(is.null(it2)) {
+      if(is.null(w2)) it2 <- it1 else it2 <- which(tlist$tvec==w2)
     }
     if(is.null(colvec)) {
        if(is.null(crange)) {
@@ -316,19 +346,125 @@ plot.sim <- function(simlist, sobj, tlist, parlist, type="epoch",
        colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
     }
     if(make.movie) {
-      odir <- paste0(movie.rootdir,"/",movie.name,"/")
+      outdir <- paste0(movie.rootdir,"/",movie.name,"/")
+      if(!dir.exists(outdir)) dir.create(outdir)
       par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
       fstem <- movie.name
       fmovie <- paste0(movie.rootdir,"/",movie.name,".gif")
     }
-    for(t in t1:t2) {
-       week <- tlist$tvec[t1]
-       plot((sobj$polysf %>% mutate(concentration=simlist$cmat[t1,]))['concentration'],
+    for(it in it1:it2) {
+       if(make.movie) {
+         fname <- sprintf("%s/%s%04d.png", outdir, fstem, it)
+         png(file=fname, width=480, height=480)
+         par(oma=c(3.1,0.5,0,0))
+         par(mar=1.1*c(2.5,1,4.1,4.1))
+       }
+       week <- tlist$tvec[it]
+       plot((sobj$polysf %>% mutate(concentration=simlist$cmat[it,]))['concentration'],
             pal=colvec,breaks=breaks,
             main=paste0("Algal concentration in Week ",week),reset=FALSE)
+       if(fill.coast) plot(st_geometry(sobj$coastsf), col=coast.col, add=TRUE)
+       if(make.movie) {
+         box()
+         if(date.axis) {
+           par(usr=c(as.numeric(week.as.date(tlist$tvec[c(t1,t2)])),0,1))
+           axis.Date(1)
+           points(week.as.date(week),0,pch=16,cex=2,xpd=TRUE)
+         }
+         mtext(format(week.as.date(week), "%d-%m-%Y"), side=3, line=0, adj=1, cex=0.8)
+         mtext(ifelse(logscale,"Log scale","Linear scale"), side=3, line=0, adj=0, cex=0.8)
+         dev.off()
+       }
     }
+    if(make.movie) {
+      image_list <- lapply(list.files(outdir,full.names=TRUE), image_read)
+      poly_animated <- image_animate(image_join(image_list), fps=movie.fps)
+      image_write(poly_animated, fmovie)
+      if(movie.clean) {
+         unlink(list.files(outdir,full.names=TRUE))
+         unlink(outdir, recursive=TRUE)
+      }
+    }
+
   } else {
-    invisible()
+    warning(paste0("Plot type ",type," not recognised."))
+  }
+  invisible()
+}
+
+
+plot.data <- function(sobj, datalist, type="epoch",
+                      logscale=FALSE, date.axis=TRUE,
+                      fill.coast=TRUE, coast.col="dark green",
+                      colvec=NULL, crange=NULL, it1=NULL, it2=NULL, w1=NULL, w2=NULL,
+                      make.movie=FALSE, movie.name="datamovie", movie.rootdir="ignore/",
+                      movie.fps=20, movie.clean=TRUE) {
+
+  if(type=="observed.concentration.over.time") {
+    image(week.as.date(datalist$tvec), 1:datalist$npoly, datalist$cmat, axes=FALSE, xlab="Week", ylab="Polygon")
+    title("Observed algal concentration")
+    axis.Date(1,format="%Y"); axis(2,at=1:datalist$npoly,datalist$polyid,las=2); box()
+    abline(v=as.Date(paste(datalist$year1:datalist$year2,"01-01",sep="-")), lty=2)
+
+  } else if(type=="map.concentration") {
+
+    if(is.null(it1)) it1 <- which(datalist$tvec==w1)
+    if(is.null(it2)) {
+      if(is.null(w2)) it2 <- it1 else it2 <- which(datalist$tvec==w2)
+    }
+    if(is.null(colvec)) {
+      if(is.null(crange)) {
+        crange <- c(0,max(datalist$cmat,na.rm=TRUE))
+        if(diff(crange)==0) crange <- c(0,1)
+      }
+      nbreaks <- 11
+      breaks <- seq(from=crange[1], to=crange[2], length=nbreaks)
+      colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
+    }
+    if(make.movie) {
+      outdir <- paste0(movie.rootdir,"/",movie.name,"/")
+      if(!dir.exists(outdir)) dir.create(outdir)
+      par(opar); par(oma=c(3.1,0.5,0,0)); par(mar=1.1*c(2.5,1,4.1,4.1))
+      fstem <- movie.name
+      fmovie <- paste0(movie.rootdir,"/",movie.name,".gif")
+    }
+    for(it in it1:it2) {
+      if(make.movie) {
+        fname <- sprintf("%s/%s%04d.png", outdir, fstem, it)
+        png(file=fname, width=480, height=480)
+        par(oma=c(3.1,0.5,0,0))
+        par(mar=1.1*c(2.5,1,4.1,4.1))
+      }
+      week <- tlist$tvec[it]
+      plot((sobj$polysf[datalist$poly.idx,] %>%
+              mutate(concentration=datalist$cmat[it,]))['concentration'],
+           pal=colvec,breaks=breaks,
+           main=paste0("Observed algal concentration in Week ",week),reset=FALSE)
+      if(fill.coast) plot(st_geometry(sobj$coastsf), col=coast.col, add=TRUE)
+      if(make.movie) {
+        box()
+        if(date.axis) {
+          par(usr=c(as.numeric(week.as.date(datalist$tvec[c(it1,it2)])),0,1))
+          axis.Date(1)
+          points(week.as.date(week),0,pch=16,cex=2,xpd=TRUE)
+        }
+        mtext(format(week.as.date(week), "%d-%m-%Y"), side=3, line=0, adj=1, cex=0.8)
+        mtext(ifelse(logscale,"Log scale","Linear scale"), side=3, line=0, adj=0, cex=0.8)
+        dev.off()
+      }
+    }
+    if(make.movie) {
+      image_list <- lapply(list.files(outdir,full.names=TRUE), image_read)
+      poly_animated <- image_animate(image_join(image_list), fps=movie.fps)
+      image_write(poly_animated, fmovie)
+      if(movie.clean) {
+        unlink(list.files(outdir,full.names=TRUE))
+        unlink(outdir, recursive=TRUE)
+      }
+    }
+
+  } else {
+    warning(paste0("Plot type ",type," not recognised."))
   }
   invisible()
 }

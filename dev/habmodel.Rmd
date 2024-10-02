@@ -1006,27 +1006,65 @@ Requirements
 Geography, covariates and observations
 
 ```{r}
-nydia_sf <- st_crop(marlpoly_sf.trim, 
-                    xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
-nydia_sf <- nydia_sf %>% filter(!(CLUSTER_ID%in%c(48,71,162,194,251,258,293,406)))
-nydia.poly <- nydia_sf$CLUSTER_ID
-idx <- nydia.poly
-connsub <- lapply(conn, function(cmat) cmat[idx,][,idx])
-covsublist <- lapply(covlist, function(cmat) cmat[idx,])
+region <- "nydia"
+region <- "all"
+```
 
-polysf <- nydia_sf
-polyid <- nydia.poly
-clusteridname <- "CLUSTER_ID"
-pmat <- t(connsub[[1]])
-colnames(pmat) <- nydia.poly
-rownames(pmat) <- colnames(pmat)
-npoly <- nrow(pmat)
-# check: max(apply(pmat,1,sum))==1
-(max(apply(pmat,1,sum))-1) < 3e-16
-covmat <- covsublist[[1]]
-eventdat <- event[event$CLUSTER_ID%in%idx,]
-arealabel <- "Nydia"
+```{r}
+if(region=="nydia") {
+  nydia_sf <- st_crop(marlpoly_sf.trim, 
+                      xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
+  nydia_sf <- nydia_sf %>% filter(!(CLUSTER_ID%in%c(48,71,162,194,251,258,293,406)))
+  nydia.poly <- nydia_sf$CLUSTER_ID
+  idx <- nydia.poly
+  connsub <- lapply(conn, function(cmat) cmat[idx,][,idx])
+  covsublist <- lapply(covlist, function(cmat) cmat[idx,])
 
+  polysf <- nydia_sf
+  polyid <- nydia.poly
+  clusteridname <- "CLUSTER_ID"
+  pmat <- t(connsub[[1]])
+  colnames(pmat) <- nydia.poly
+  rownames(pmat) <- colnames(pmat)
+  npoly <- nrow(pmat)
+  # check: max(apply(pmat,1,sum))==1
+  (max(apply(pmat,1,sum))-1) < 3e-16
+  covmat <- covsublist[[1]]
+  arealabel <- "Nydia"
+
+  eventdat <- event[event$CLUSTER_ID%in%idx,]
+  monitorid <- polyid
+  monitorid <- c(32,159,172,401,403)
+  
+  coastsf <- coast.marlselect
+  
+} else { # all
+  polysf <- marlpoly_sf.trim
+  polysf <- polysf %>% filter(volume_15>0)
+  idx <- polysf$CLUSTER_ID
+  connsub <- lapply(conn, function(cmat) cmat[idx,][,idx])
+  covsublist <- lapply(covlist, function(cmat) cmat[idx,])
+
+  polyid <- polysf$CLUSTER_ID
+  clusteridname <- "CLUSTER_ID"
+  pmat <- t(connsub[[1]])
+  colnames(pmat) <- polyid
+  rownames(pmat) <- colnames(pmat)
+  npoly <- nrow(pmat)
+  # check: max(apply(pmat,1,sum))==1
+  (max(apply(pmat,1,sum))-1) < 3e-16
+  covmat <- covsublist[[1]]
+  arealabel <- "Marlborough"
+  
+  eventdat <- event[event$CLUSTER_ID%in%idx,]
+  monitorid <- polyid
+  monitorid <- sort(unique(event$CLUSTER_ID))
+  
+  coastsf <- coast.marlselect
+}
+  
+# volume to 15m
+volvec <- polysf$volume_15
 # residency
 resvec <- diag(pmat)
 names(resvec) <- colnames(pmat)
@@ -1038,8 +1076,29 @@ polysf <- merge(polysf,rrdf)
 polysf$nid <- 1:npoly
 
 sobj <- list(npoly=npoly, polysf=polysf, polyid=polyid, pmat=pmat, covmat=covmat, 
-             retvec=retvec, resvec=resvec, 
-             clusteridname=clusteridname, arealabel=arealabel) 
+             retvec=retvec, resvec=resvec, volvec=volvec,
+             clusteridname=clusteridname, arealabel=arealabel,
+             coastsf=coastsf) 
+
+datalist <- list(event=eventdat, monitorid=monitorid)
+
+datalist$week1 <- min(eventdat$week)
+datalist$week2 <- max(eventdat$week)
+datalist$tvec <- datalist$week1:datalist$week2
+datalist$nt <- length(datalist$tvec)
+datalist$datevec <- week.as.date(datalist$tvec)
+datalist$year1 <-as.numeric(format(datalist$datevec[1],"%Y"))
+datalist$year2 <-as.numeric(format(datalist$datevec[datalist$nt],"%Y"))
+
+datalist$polyid <- sort(unique(eventdat$CLUSTER_ID))
+datalist$npoly <- length(datalist$polyid)
+datalist$poly.idx <- match(datalist$polyid,sobj$polysf$CLUSTER_ID)
+
+cmat <- array(NA,dim=c(datalist$nt,datalist$npoly))
+dimnames(cmat) <- list(datalist$tvec, datalist$polyid)
+cmat[cbind(match(eventdat$week, datalist$tvec),
+           match(eventdat$CLUSTER_ID, colnames(cmat)))] <- eventdat$Value
+datalist$cmat <- cmat
 ```
 
 Time simulation
@@ -1100,11 +1159,34 @@ axis.Date(1,format="%Y", las=1); axis(2); box()
 ```
 
 ```{r warning=FALSE}
-plot.sobj(sobj, type="polygons")
-plot.sobj(sobj, type="volume")
-plot.sobj(sobj, type="retention")
-plot.sobj(sobj, type="residency")
-plot.sobj(sobj, type="communication")
+plot.sobj(sobj, datalist, type="polygons")
+plot.sobj(sobj, datalist, type="volume")
+plot.sobj(sobj, datalist, type="retention")
+plot.sobj(sobj, datalist, type="residency")
+sfreset()
+plot.sobj(sobj, datalist, type="communication")
+```
+
+Data
+
+````{r}
+plot.data(sobj, datalist, type="observed.concentration.over.time") 
+```
+
+````{r}
+plot.data(sobj, datalist, type="map.concentration", it1=1, it2=5) 
+```
+
+```{r}
+plot.data(sobj, datalist, type="map.concentration",it1=1,it2=5,
+          make.movie=TRUE, movie.name=paste0(region,"-actual-movie1"))
+```
+
+```{r}
+make.movie <- TRUE
+make.movie <- FALSE
+#plot.data(sobj, datalist, type="map.concentration",it1=1,it2=datalist$nt,
+#          make.movie=make.movie, movie.name=paste0(region,"-actual-movie2"))
 ```
 
 
@@ -1113,22 +1195,25 @@ Simulation
 ```{r}
 set.seed(-4)
 simlist <- do.sim(sobj, tlist, parlist)
-plot.sim(simlist, sobj, tlist, parlist, type="epoch")
-plot.sim(simlist, sobj, tlist, parlist, type="carrying.density")
-plot.sim(simlist, sobj, tlist, parlist, type="map.carrying.density")
+```
+
+```{r}
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="epoch")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="carrying.density")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="map.carrying.density")
 sfreset(); 
-plot.sim(simlist, sobj, tlist, parlist, type="carrying.mass")
-plot.sim(simlist, sobj, tlist, parlist, type="map.carrying.mass")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="carrying.mass")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="map.carrying.mass")
 sfreset(); 
-plot.sim(simlist, sobj, tlist, parlist, type="bloom.initiation.probability")
-plot.sim(simlist, sobj, tlist, parlist, type="map.bloom.initiation.probability")
-plot.sim(simlist, sobj, tlist, parlist, type="map.number.of.initiations"); ##sfreset()
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="bloom.initiation.probability")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="map.bloom.initiation.probability")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="map.number.of.initiations"); ##sfreset()
 sfreset(); 
-plot.sim(simlist, sobj, tlist, parlist, type="bloom.initiation.times")
-plot.sim(simlist, sobj, tlist, parlist, type="innovation.biomass")
-plot.sim(simlist, sobj, tlist, parlist, type="biomass.over.time")
-plot.sim(simlist, sobj, tlist, parlist, type="concentration.over.time")
-plot.sim(simlist, sobj, tlist, parlist, type="observed.concentration.over.time")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="bloom.initiation.times")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="innovation.biomass")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="biomass.over.time")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="concentration.over.time")
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="observed.concentration.over.time")
 plot(tvec,apply(simlist$cmat,1,max), xlab="Week", ylab="Maxmimum observed concentration",
      main="Maximum concentration"); lines(tvec, apply(simlist$cmat,1,max))
 abline(v=tvec[simlist$ievent$istart],col="green")
@@ -1136,43 +1221,21 @@ abline(v=tvec[simlist$ievent$iend],col="red")
 ```
 
 ```{r}
-plot.sim(simlist, sobj, tlist, parlist, type="map.concentration",t1=1,t2=5)
-```
-```{r}
-xrange <- c(0,max(simlist$cmat))
-nbreaks <- 11
-breaks <- seq(from=xrange[1], to=xrange[2], length=nbreaks)
-colvec <- colorRampPalette(c("light grey","red"))(nbreaks-1)
-t <- 1
-t <- 53
-week <- tvec[t]
-plot((sobj$polysf %>% mutate(concentration=simlist$cmat[t,]))['concentration'], 
-     pal=colvec,breaks=breaks,
-     main=paste0("Algal concentration in Week ",week),reset=FALSE)
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="map.concentration",it1=1,it2=5)
 ```
 
 ```{r}
-ii <- find.events(cmat)
-
-xx <- apply(cmat,1,max)
-plot(tvec,xx); lines(tvec,xx)
-abline(v=tvec[ii$istart],col="green"); abline(v=tvec[ii$iend],col="blue")
-nrow(ii) # 8 events
-ii$xmax
+plot.sim(simlist, sobj, tlist, parlist, datalist, type="map.concentration",it1=1,it2=5,
+         make.movie=TRUE, movie.name=paste0(region,"-movie1"))
 ```
 
 ```{r}
-t <- 1
-#for(t in 1:nt) {
-im <- which.max(ii$xmax)
-#for(t in 100:130) {
-for(t in (max(1,ii$istart[im]-2)):(min(nt,ii$iend[im]+2))) {
-  week <- tvec[t]
-  plot((all_sf %>% mutate(concentration=cmat[t,]))['concentration'], 
-     pal=colvec,breaks=breaks,
-     main=paste0("Algal concentration in Week ",week),reset=FALSE)
-}
+make.movie <- TRUE
+make.movie <- FALSE
+#plot.sim(simlist, sobj, tlist, parlist, datalist, type="map.concentration",it1=1,it2=tlist$nt,
+#         make.movie=make.movie, movie.name=paste0(region,"-movie2"))
 ```
+
 
 
 
