@@ -283,10 +283,7 @@ plot(fit1)
 
 https://github.com/JohannesBuchner/RMultiNest
 
-```{r}
 library(RMultiNest)
-```
-
 
 # Dnest
 
