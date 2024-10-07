@@ -223,8 +223,11 @@ post_class <- ((post_class_p[,,1] > 0.5)*1) + 1
 
 https://mc-stan.org/users/documentation/case-studies/Latent_class_case_study.html#stan-code-for-lca-models
 
+### Gamma model
 
 ```{r}
+library(rstan)
+library(dplyr)
 narea <- 200
 pavec <- sort(runif(narea, 0.2, 0.8))
 ivec <- rbinom(narea,1,pavec)
@@ -241,8 +244,8 @@ data {
 }
 
 parameters {
-  real a;
-  real b;
+  real<lower=0> a;
+  real<lower=0> b;
 }
 
 model {
@@ -253,7 +256,7 @@ fstan <- "ignore/simple1.stan"
 ```
 
 ```{r}
-stan_data <- list(narea=narea, y=y)
+stan_data <- list(narea=narea, y=yvec)
 
 cat(stancode, file=fstan)
 start.time <- Sys.time()
@@ -261,7 +264,7 @@ fit1 <- stan(
   file = fstan,              # Stan program
   data = stan_data,          # named list of data
   chains = 4,                # number of Markov chains
-  warmup = 500,             # number of warmup iterations per chain
+  warmup = 500,              # number of warmup iterations per chain
   iter = 1000,               # total number of iterations per chain
   cores = 4,                 # number of cores (could use one per chain)
   refresh = 0                # no progress shown
@@ -275,5 +278,11 @@ unlink(fstan)
 fit1
 plot(fit1)
 ```
+
+# Multinest
+
+
+
+# Dnest
 
 
