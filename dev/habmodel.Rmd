@@ -228,6 +228,8 @@ Parameters (to be estimated)
      \log Y_{it} | M_{it}>0, \sigma_\varepsilon^2 &\sim& \text{Normal}(\log (M_{it}/V_i),
      \sigma_\varepsilon^2)
    \end{eqnarray*}
+   ... add a possibility of false negatives ... at each station?  or a single 
+   probability for all stations?
 
 
 ## Data in the Nydia area
