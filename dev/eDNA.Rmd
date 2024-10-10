@@ -3,14 +3,144 @@ title: "eDNA"
 author: "Richard Arnold"
 date: '2024-07-16'
 output:
+  pdf_document: default
   html_document:
     code_folding: hide
-  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+## Detection of eDNA from tows
+
+Model:
+
+ * $N$ organisms located at $(x,y,z)=(0,0,h)$
+ * shed $S$ copies per unit time
+ * plume moves at a constant velocity $v$ towards positive $x$ values
+ * disperse fully vertically after a short distance
+ * disperse by a random walk in the $y$ direction such that the dispersion in $y$
+   after time $t$ is $\sigma(t)=\sqrt{2A_Ht}$
+ * decay over time such that the number density at time $t$ is reduced by a factor of $e^{-\alpha t}$ 
+   after release at time $0$
+   
+Consider time $t$, following a time interval $\Delta t$ at $t=0$,
+
+ * $NS\Delta t$ copies are released at $t=0$
+ * the number density has decayed by a factor $e^{-\alpha t}$
+ * the plume has travelled distance $x=vt$
+ * the $NS\Delta t$ copies are dispersed over a distance $\Delta x=v\Delta t$ in $x$
+ * the copies are dispersed uniformly over the depth $h$
+ * the plume has dispersed in $y$ with dispersion $\sigma(x)=\sqrt{2A_Ht}=\sqrt{aA_Hx/v}$
+ 
+Volume number density at location $(x,y,z)$ is
+\begin{eqnarray*}
+   C(x,y,z) 
+     &=& NS(\Delta t) \times e^{-\alpha t}
+                      \times \frac{1}{\Delta x} 
+                      \times \frac{1}{\sqrt{2\pi\sigma^2(x)}}e^{-\frac12 y^2/\sigma^2(x)}
+                      \times \frac{1}{h}\\
+     &=& \frac{NS}{hv} \frac{1}{\sqrt{2\pi\sigma^2(x)}}e^{-\frac12 y^2/\sigma^2(x)-\alpha x/v}
+\end{eqnarray*}
+
+```{r}
+xmax <- 15
+ymax <- 10
+np <- 101
+Ah <- 1; v <- 2
+xvec <- seq(from=0,to=xmax,length=np)
+y1 <- 2*sqrt(2*Ah*xmax/v)
+dx <- 1.5
+dt <- dx/v
+```
+
+Consider a full depth tow at location $(x,y)$ with area $A_0$.  The expected number of
+copies captured is
+\begin{eqnarray*}
+  K_V(x,y) &=& \int\!\int_{A_{0}} {\rm d}x{\rm d}y \int_0^h {\rm d}z\; C(x,y,z)\\
+           &=& A_0 C(x,y)\\
+           &=& \frac{NSA_0}{v} \frac{1}{\sqrt{2\pi\sigma^2(x)}}e^{-\frac12 y^2/\sigma^2(x)-\alpha x/v}\\
+           &=& \frac{NSV_V}{vh} \frac{1}{\sqrt{2\pi\sigma^2(x)}}e^{-\frac12 y^2/\sigma^2(x)-\alpha x/v}
+\end{eqnarray*}
+where $C(x,y)=h C(x,y,z)$ is the area density (since $C(x,y,z)$ is independent of $z$), and $V_V=A_0h$ is
+the volume of water sampled.
+
+```{r}
+plot(NA,NA,xlim=c(0,xmax),ylim=ymax*c(-1,1),xlab="x",ylab="y",asp=1)
+abline(h=0)
+lines(xvec, +sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, -sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, +2*sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, -2*sqrt(2*Ah*xvec/v),col="grey")
+abline(v=xmax,col="red")
+abline(v=xmax-dx,col="grey")
+text(xmax, y1/2, lab=expression(A[0]), pos=4)
+polygon(xmax+c(-dx,0,0,-dx,-dx), (y1/2) + (dx/2)*c(-1,-1,1,1,-1), col="green")
+title(expression("Small vertical tow at location (x,y) depth h, area "*A[0]))
+```
+
+Consider a full depth tow of length $L$ and width $w$ at constant $x$ across the plume, with
+$L$ being sufficiently large that the full plume is captured (i.e. $\frac12L>3\sigma(x)$.  The expected number of
+copies captured is
+\begin{eqnarray*}
+  K_H(x)   &=& \int_{x-w/2}^{x+w/2} {\rm d}x \int_{-L/2}^{L/2} {\rm d}y \int_0^h {\rm d}z\; C(x,y,z)\\
+           &=& w \frac{NS}{hv} e^{-\alpha x/v} h\\
+           &=& \frac{NSw}{v} e^{-\alpha x/v}\\
+           &=& \frac{NSV_H}{hLv} e^{-\alpha x/v}
+\end{eqnarray*}
+where $V_H=wLh$ is the volume of water sampled.
+
+```{r}
+plot(NA,NA,xlim=c(0,xmax),ylim=ymax*c(-1,1),xlab="x",ylab="y",asp=1)
+abline(h=0)
+lines(xvec, +sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, -sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, +2*sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, -2*sqrt(2*Ah*xvec/v),col="grey")
+abline(v=xmax,col="red")
+abline(v=xmax-dx,col="grey")
+text(xmax-dx/2, y1, lab="w", pos=3)
+text(xmax, y1, lab="+L/2", pos=4)
+text(xmax, -y1, lab="-L/2", pos=4)
+polygon(xmax+c(-dx,0,0,-dx,-dx), y1*c(-1,-1,1,1,-1), col="green")
+title("Horizontal cross plume tow at location x\ndepth h, width w, length L")
+```
+
+### Detection
+
+In both of these scenarios if $K$ is the expected number of copies captured, then the actual number of copies captured 
+follows a Poisson distribution
+\[
+   Y|K \sim \text{Poisson}(K)
+\]
+i.e.
+\[ 
+  \Pr(Y=y|K) = e^{-K} \frac{K^y}{y!}
+\]
+
+Assume that the probability of detection ($Z=1$) given the presence of $y$ copies is
+$d(y)$, i.e.
+\[
+  \Pr(Z=1|y) = d(y)
+\]
+then the probability of detection, marginalising out the statistical variation, is
+\begin{eqnarray*}
+  \Pr(Z=1) &=& \sum_{y=0}^\infty \Pr(Z=1|y) \Pr(Y=y)\\
+           &=& \sum_{y=0}^\infty d(y) e^{-K} \frac{K^y}{y!}
+\end{eqnarray*}
+If $d(y)$ is a simple threshold function $d(y)=I(y\geq y_t)$ (i.e. detection is certain
+at or above a threshold number $y_t$, and impossible below that threshold) then
+\begin{eqnarray*}
+  \Pr(Z=1) &=& \sum_{y=y_t}^\infty e^{-K} \frac{K^y}{y!}\\
+           &=& 1 - \sum_{y=0}^{y_t-1} e^{-K} \frac{K^y}{y!}
+\end{eqnarray*}
+
+
+```{r}
+knitr::knit_exit()
+```
+
 
 ## Detection of eDNA
 
