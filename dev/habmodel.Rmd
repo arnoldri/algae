@@ -396,6 +396,7 @@ Requirements
 
 ```{r}
 region <- "nydia"
+movie.clean <- FALSE
 invisible()
 ```
 
@@ -406,6 +407,7 @@ invisible()
 
 ```{r}
 region <- "all"
+movie.clean <- FALSE
 invisible()
 ```
 

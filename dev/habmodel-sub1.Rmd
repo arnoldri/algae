@@ -184,14 +184,16 @@ plot.data(sobj, datlist, type="map.concentration", it1=1, it2=5, logscale=TRUE)
 
 ```{r}
 plot.data(sobj, datlist, type="map.concentration",it1=1,it2=5,
-          make.movie=TRUE, movie.name=paste0(region,"-actual-movie1"))
+          make.movie=TRUE, movie.name=paste0(region,"-actual-movie1"),
+          movie.clean=movie.clean)
 ```
 
 ```{r}
 make.movie <- TRUE
 #make.movie <- FALSE
 plot.data(sobj, datlist, type="map.concentration",it1=1,it2=datlist$nt,
-          make.movie=make.movie, movie.name=paste0(region,"-actual-movie2"))
+          make.movie=make.movie, movie.name=paste0(region,"-actual-movie2"),
+          movie.clean=movie.clean)
 invisible()
 ```
 
@@ -263,14 +265,16 @@ plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,
 
 ```{r}
 plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,it2=5,
-         make.movie=TRUE, movie.name=paste0(region,"-movie1"))
+         make.movie=TRUE, movie.name=paste0(region,"-movie1"),
+         movie.clean=movie.clean)
 ```
 
 ```{r}
 make.movie <- TRUE
 #make.movie <- FALSE
 plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,it2=tlist$nt,
-         make.movie=make.movie, movie.name=paste0(region,"-movie2"))
+         make.movie=make.movie, movie.name=paste0(region,"-movie2"),
+         movie.clean=movie.clean)
 invisible()
 ```
 
@@ -279,6 +283,7 @@ make.movie <- TRUE
 #make.movie <- FALSE
 plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,it2=tlist$nt,
          monitored=TRUE,
-         make.movie=make.movie, movie.name=paste0(region,"-monitored-movie2"))
+         make.movie=make.movie, movie.name=paste0(region,"-monitored-movie2"),
+         movie.clean=movie.clean)
 invisible()
 ```
