@@ -126,7 +126,8 @@
 \item
   \(n\) polygons \(i=1,\ldots,n\)
 \item
-  \(t\) time in weeks: Week 0 is the week of 1 January 2018
+  \(t\) time in weeks: Week 0 is the week of 1 January 2018,
+  \(t=0,\ldots,T\)
 \item
   \(q_t\) is the seasonal indicator: 1 if the week is in the months of
   December-July, 0 otherwise
@@ -137,12 +138,16 @@
   \(i\) in week \(t\).
 
   Mass conservation implies \[ 
-    \sum_{i=1}^n P_{ijt}\leq 1 \qquad\text{for all $j,t$}
+    W_{jt} = \sum_{i=1}^n P_{ijt}\leq 1 \qquad\text{for all $j,t$}
   \] where the sum is less than 1 when mass is lost at the edges of the
   set of polygons.
 \item
+  Retention: \(W_{jt} \equiv \sum_{i=1}^n P_{ijt}\) proportion of mass
+  in polygon \(j\) retained by the system (i.e.~not lost at the edges)
+  over the one week period at time \(t\)
+\item
   \(R_{it} \equiv P_{iit}\) = proportion of mass remaining resident in
-  week \(t\)
+  polygon \(i\) in week \(t\)
 \item
   \({\bf x}_{it}\) covariates in polygon \(i\) at time \(t\)
   (temperature, salinity, etc.)
@@ -155,10 +160,13 @@
   \end{eqnarray*} where \(\tau_0\) is the probability of initiation of
   an epoch favourable to algal blooms (\(\tau_0\) is low), and
   \(\tau_1\) is the probability of the persistence of that epoch.
+
+  (Q: do we need spatial autocorrelation as well? how can we include
+  covariates?)
 \item
   \(\pi_{it}\) bloom initiation probability in polygon \(i\) at time
   \(t\) \[
-     \logit(\pi_i) = a_0 + b_0 \logit(R_{it})
+     \logit(\pi_{it}) = \mu_0 + {\bf x}_{it}^T{\beta}_0 + \lambda_0 \logit(R_{it})
   \]
 \item
   At time step \(t\) in each polygon \(i\) the innovation indicator is
@@ -170,36 +178,160 @@
   New biomass innovation in polygon \(i\) at time \(t\)
   \begin{eqnarray*}
      A_{it} | I_{it}=0 &\sim& \delta_0\\
-     A_{it} | I_{it}=1 &\sim& \Gamma(a,b)
-  \end{eqnarray*}
+     A_{it} | I_{it}=1 &\sim& \text{Gamma}(a,b)
+  \end{eqnarray*} \(\delta_0\) is a point mass at zero: we get no new
+  biomass if \(I_{it}=0\).
 \item
-  Time evolution of algal mass \(M_{it}\) \[
-     M_{it} = A_{it} + e^{\alpha_{E_t} + {\bf x}_{it}^T{\beta}_2 + \lambda_2 \logit R_{it}}
+  Baseline algal mass distribution \(M_{i0}=0\) for all \(i\): i.e.~no
+  mass at time \(t=0\).
+\item
+  Time evolution of algal mass \(M_{it}\) for \(t>0\) \[
+     M_{it} = e^{\eta_{it}}\left[
+              A_{it} + e^{-\gamma (1-E_t) + E_t(\alpha + {\bf x}_{it}^T{\beta}_2 + \lambda_2 \logit R_{it})}
                        \sum_{j=1}^n P_{ijt} 
-                                    e^{{\bf x}_{jt}^T{\beta}_1 + \lambda_1 \logit R_{jt}}
-                                    X_{j,t-1}
-  \] We may not need both of \(({\beta}_1,\lambda_1)\) (growth before
-  transport) and \(({\beta}_2,\lambda_2)\) (growth after transport).
+                                    e^{E_t({\bf x}_{jt}^T{\beta}_1 + \lambda_1 \logit R_{jt})}
+                                    M_{j,t-1}
+              \right]
+  \] where \[
+     \eta_{it} \sim \text{Normal}(0,\sigma^2_\eta)
+  \] We may not need both of \(({\lambda_1,\beta}_1)\) (growth before
+  transport) and \((\lambda_2,{\beta}_2)\) (growth after transport).
+
+  \(\alpha>0\) is the basic (covariate independent) growth rate of
+  blooms in a favourable epoch \(E_t=1\), \(\gamma>0\) is the decay rate
+  of blooms in an unfavourable epoch \(E_t=0\).
 \item
   Observation of algal density \(Y_{it}\) \begin{eqnarray*}
     Y_{it} | M_{it} = 0 &\sim& \delta_0\\
-    \log Y_{it} | M_{it}>0, \sigma_\varepsilon^2 &\sim& \text{Normal}(\log M_{it}, \sigma_\varepsilon^2)
+    \log Y_{it} | M_{it}>0, \sigma_\varepsilon^2 &\sim& \text{Normal}(\log (M_{it}/V_i),
+    \sigma_\varepsilon^2)
   \end{eqnarray*}
 \end{itemize}
 
-\begin{verbatim}
-## Warning: attribute variables are assumed to be spatially constant throughout
-## all geometries
-\end{verbatim}
+Summary of quantities
 
-\includegraphics{habmodel_files/figure-latex/unnamed-chunk-2-1.pdf}
+Indexing
+
+\begin{itemize}
+\tightlist
+\item
+  \(i=1,\ldots,n\) - labels of polygons
+\item
+  \(t=0,\ldots,T\) - labels of weeks
+\end{itemize}
+
+Fixed
+
+\begin{itemize}
+\tightlist
+\item
+  \(q_t\) seasonal indicator (1 if the week is in the months of
+  December-July, 0 otherwise)
+\item
+  \(V_i\) volume of polygon \(i\) to a depth of 15m
+\end{itemize}
+
+Observed/Modelled separately
+
+\begin{itemize}
+\tightlist
+\item
+  \({\bf x}_{it}\) - covariates (temperature, salinity, etc)
+\item
+  \(P_{ijt}\) - proportion of mass in polygon \(j\) moving to polygon
+  \(i\) in week \(t\)
+\item
+  \(Y_{it}\) - observed density (in a subset of polygons at a subset of
+  times)
+\end{itemize}
+
+Latent (to be estimated)
+
+\begin{itemize}
+\tightlist
+\item
+  \(E_t\) epoch indicator
+\item
+  \(I_{it}\) innovation indicator
+\item
+  \(A_{it}\) innovation biomass
+\item
+  \(M_{it}\) mass in polygon \(i\) at time \(t\)
+\end{itemize}
+
+Derived
+
+\begin{itemize}
+\tightlist
+\item
+  \(R_{it}\) - residency: derived from \({\bf P}_t\):
+  \(R_{it} = P_{iit}\)
+\item
+  \(\pi_{it}\) - bloom initiation probability:
+  \(\logit(\pi_{it})=\mu_0+{\bf x}_{it}^T{\beta}_0+\lambda_0\logit(R_{it})\)
+\end{itemize}
+
+Parameters (to be estimated)
+
+\begin{itemize}
+\tightlist
+\item
+  \(\tau_0\) growth epoch initiation probability
+\item
+  \(\tau_1\) growth epoch persistence probability
+\item
+  \((\alpha_0, \alpha_1)\) baseline log growth parameters in epochs 0
+  (decay) and 1 (growth)
+\item
+  \(\mu_0\) baseline bloom initiation probability parameter
+\item
+  \((\lambda_0,\beta_0)\) parameters of bloom initiation probability
+\item
+  \((\lambda_1,\beta_1)\) parameters of pre-transport growth
+\item
+  \((\lambda_2,\beta_2)\) parameters of post-transport growth
+\item
+  \(\sigma_\eta\) - mass evolution error
+\item
+  \(\sigma_\varepsilon\) - density observation error
+\end{itemize}
+
+\hypertarget{data-in-the-nydia-area}{%
+\subsection{Data in the Nydia area}\label{data-in-the-nydia-area}}
 
 \includegraphics{habmodel_files/figure-latex/unnamed-chunk-3-1.pdf}
 \includegraphics{habmodel_files/figure-latex/unnamed-chunk-3-2.pdf}
 \includegraphics{habmodel_files/figure-latex/unnamed-chunk-3-3.pdf}
 
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-4-1.pdf}
+
+\hypertarget{data-on-events}{%
+\subsection{Data on events}\label{data-on-events}}
+
 \includegraphics{habmodel_files/figure-latex/unnamed-chunk-5-1.pdf}
-\includegraphics{habmodel_files/figure-latex/unnamed-chunk-5-2.pdf}
+
+\hypertarget{covariates}{%
+\subsubsection{Covariates}\label{covariates}}
+
+Residency: we have matrices \(P_{ijt}\) for the weeks 2518-2529 (dates
+2018-04-02-2018-06-18)
+
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-6-1.pdf}
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-6-2.pdf}
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-6-3.pdf}
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-6-4.pdf}
+
+Temperature over time
+
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-7-1.pdf}
+
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-8-1.pdf}
+
+\hypertarget{model-implementation}{%
+\subsection{Model implementation}\label{model-implementation}}
+
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-10-1.pdf}
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-10-2.pdf}
 
 \begin{verbatim}
 ##  [1] 0 2 0 0 1 0 0 1 1 0 0 0 2 0 0 1 0
@@ -209,8 +341,8 @@
 ## Warning: st_centroid assumes attributes are constant over geometries
 \end{verbatim}
 
-\includegraphics{habmodel_files/figure-latex/unnamed-chunk-6-1.pdf}
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-11-1.pdf}
 
-\includegraphics{habmodel_files/figure-latex/unnamed-chunk-7-1.pdf}
+\includegraphics{habmodel_files/figure-latex/unnamed-chunk-12-1.pdf}
 
 \end{document}

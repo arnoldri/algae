@@ -1,0 +1,289 @@
+Geography, covariates and observations
+
+```{r warning=FALSE}
+if(region=="nydia") {
+  nydia_sf <- st_crop(marlpoly_sf.trim, 
+                      xmin=xlim.nydia[1], xmax=xlim.nydia[2], ymin=ylim.nydia[1], ymax=ylim.nydia[2])
+  nydia_sf <- nydia_sf %>% filter(!(CLUSTER_ID%in%c(48,71,162,194,251,258,293,406)))
+  polyid <- nydia_sf$CLUSTER_ID
+  polysf <- nydia_sf
+  regionlabel <- "Nydia"
+  
+  eventdat <- event[event$CLUSTER_ID%in%polyid,]
+  eventdat$polyid <- eventdat$CLUSTER_ID
+  monitorid <- polyid
+  monitorid <- c(32,159,172,401,403)
+  monitorid <- sort(unique(eventdat$CLUSTER_ID))
+
+  cpolyid <- as.character(polyid)
+  connsub <- lapply(conn, function(connmat) connmat[cpolyid,][,cpolyid])
+  covsublist <- lapply(covlist, function(covmat) covmat[cpolyid,])
+
+  polysf$polyid <- polyid
+  pmat <- t(connsub[[1]])
+  npoly <- nrow(pmat)
+  # check: max(apply(pmat,1,sum))==1
+  (max(apply(pmat,1,sum))-1) < 3e-16
+  covmat <- covsublist[[1]]
+
+  coastsf <- coast.marlselect
+  
+} else { # all
+  polysf <- marlpoly_sf.trim
+  polysf <- polysf %>% filter(volume_15>0)
+  polyid <- polysf$CLUSTER_ID
+  regionlabel <- "Marlborough"
+
+  eventdat <- event[event$CLUSTER_ID%in%polyid,]
+  eventdat$polyid <- eventdat$CLUSTER_ID
+  monitorid <- polyid
+  monitorid <- sort(unique(event$CLUSTER_ID))
+  
+  cpolyid <- as.character(polyid)
+  connsub <- lapply(conn, function(connmat) connmat[cpolyid,][,cpolyid])
+  covsublist <- lapply(covlist, function(covmat) covmat[cpolyid,])
+
+  polysf$polyid <- polyid
+  pmat <- t(connsub[[1]])
+  npoly <- nrow(pmat)
+  # check: max(apply(pmat,1,sum))==1
+  (max(apply(pmat,1,sum))-1) < 3e-16
+  covmat <- covsublist[[1]]
+
+  coastsf <- coast.marlselect
+}
+  
+rownames(polysf) <- polysf$polyid
+# volume to 15m
+volvec <- polysf[cpolyid,]$volume_15
+names(volvec) <- cpolyid
+# residency
+resvec <- diag(pmat)
+# retention
+retvec <- apply(pmat,1,sum)
+rrdf <- data.frame(polyid=polyid, residency=resvec, retention=retvec)
+polysf$resvec <- NULL; polysf$retention <- NULL
+polysf <- merge(polysf,rrdf)
+polysf$nid <- 1:npoly
+cpolyid <- as.character(polyid)
+
+sobj <- list(npoly=npoly, polysf=polysf, polyid=polyid, cpolyid=cpolyid,
+             pmat=pmat, covmat=covmat, 
+             retvec=retvec, resvec=resvec, volvec=volvec,
+             regionlabel=regionlabel, coastsf=coastsf) 
+
+datlist <- make.datlist(sobj, eventdat, monitorid)
+```
+
+Time simulation
+
+```{r}
+nt <- 5*52 + 18 # number of weeks to simulate
+w1 <- 2505; w2 <- w1 + nt-1
+#week.as.date(2505) # 2018-01-01
+tvec <- w1:w2
+datevec <- week.as.date(tvec)
+seasonvec <- seasonfunc(tvec) # TRUE if month is Dec-Jul, FALSE if month is Aug-Nov
+year1 <- as.numeric(format(week.as.date(w1),"%Y"))
+year2 <- as.numeric(format(week.as.date(w2),"%Y"))
+
+tlist <- list(nt=nt, tvec=tvec, datevec=datevec, seasonvec=seasonvec, year1=year1, year2=year2)
+```
+
+Parameters
+
+```{r}
+# bloom initation and persistence
+tau0 <- 0.30 # initiation probability
+tau1 <- 0.98 # persistence probability
+# carrying capacity
+alphac <- 5.0; lambdac <- 1.5
+# bloom initiation probability
+alpha0 <- -0.2; lambda0 <- 1.6
+# bloom mass innovation parameters
+btmean <- 0.01; btvar <- (0.5*btmean)^2
+abio <- btmean^2/btvar; bbio <- btmean/btvar
+# mass evolution
+# pre-transport growth
+lambda1 <- 0.0
+# post-transport growth
+alpha2 <- 1.0
+lambda2 <- 1.0
+gamma2 <- 1.5 # decay parameter
+# post-transport variation
+sigma.eta <- 0.03
+# observation error
+sigma.logy <- 0.03
+
+parlist <- list(tau0=tau0, tau1=tau1,
+                alphac=alphac, lambdac=lambdac,
+                alpha0=alpha0, lambda0=lambda0,
+                btmean=btmean, btvar=btvar, abio=abio, bbio=bbio,
+                lambda1=lambda1,
+                gamma2=gamma2, 
+                alpha2=alpha2, lambda2=lambda2,
+                sigma.eta=sigma.eta, sigma.logy=sigma.logy)
+```
+
+```{r}
+plot(week.as.date(tvec), seasonvec, type="s", xlab="", ylab="Season", axes=FALSE)
+title("Summer Seasons")
+#axis.Date(1,format="%b %Y", las=2); axis(2); box()
+axis.Date(1,format="%Y", las=1); axis(2); box()
+```
+
+```{r warning=FALSE}
+plot.sobj(sobj, datlist, type="polygons")
+plot.sobj(sobj, datlist, type="polygons", monitor=TRUE)
+plot.sobj(sobj, datlist, type="volume")
+plot.sobj(sobj, datlist, type="retention")
+plot.sobj(sobj, datlist, type="residency")
+sfreset()
+plot.sobj(sobj, datlist, type="communication")
+```
+
+Data
+
+```{r}
+plot.data(sobj, datlist, type="observed.concentration.over.time") 
+
+plot(NA,NA,xlim=range(datlist$tvec),ylim=c(0,max(datlist$cmat,na.rm=TRUE)),type="n", 
+     xlab="Week", ylab="Observed concentration",
+     main="Observed concentration"); 
+#invisible(apply(datlist$cmat,2,function(cvec) points(datlist$tvec, cvec)))
+invisible(apply(datlist$cmat,2,function(cvec) lines(datlist$tvec, cvec)))
+abline(v=datlist$tvec[datlist$ievent$istart],col="green")
+abline(v=datlist$tvec[datlist$ievent$iend],col="red")
+
+logoffset <- 1
+plot(NA,NA,xlim=range(datlist$tvec),ylim=c(0,log(logoffset+max(datlist$cmat,na.rm=TRUE))),type="n", 
+     xlab="Week", ylab="Observed concentration",
+     main="Observed concentration (log scale)"); 
+#invisible(apply(datlist$cmat,2,function(cvec) points(datlist$tvec, cvec)))
+invisible(apply(log(logoffset+datlist$cmat),2,function(cvec) lines(datlist$tvec, cvec)))
+abline(v=datlist$tvec[datlist$ievent$istart],col="green")
+abline(v=datlist$tvec[datlist$ievent$iend],col="red")
+
+plot(datlist$tvec,apply(datlist$cmat,1,max,na.rm=TRUE), xlab="Week", ylab="Maxmimum observed concentration",
+     main="Maximum concentration"); lines(tvec, apply(datlist$cmat,1,max,na.rm=TRUE))
+abline(v=datlist$tvec[datlist$ievent$istart],col="green")
+abline(v=datlist$tvec[datlist$ievent$iend],col="red")
+
+plot(datlist$tvec,log(logoffset+apply(datlist$cmat,1,max,na.rm=TRUE)), xlab="Week", ylab="Maxmimum observed concentration",
+     main="Maximum concentration (log scale)"); lines(tvec, log(logoffset+apply(datlist$cmat,1,max,na.rm=TRUE)))
+abline(v=datlist$tvec[datlist$ievent$istart],col="green")
+abline(v=datlist$tvec[datlist$ievent$iend],col="red")
+```
+
+```{r}
+plot.data(sobj, datlist, type="map.concentration", it1=1, it2=5, logscale=FALSE) 
+```
+```{r}
+plot.data(sobj, datlist, type="map.concentration", it1=1, it2=5, logscale=TRUE) 
+```
+
+```{r}
+plot.data(sobj, datlist, type="map.concentration",it1=1,it2=5,
+          make.movie=TRUE, movie.name=paste0(region,"-actual-movie1"),
+          movie.clean=movie.clean)
+```
+
+```{r}
+make.movie <- TRUE
+#make.movie <- FALSE
+plot.data(sobj, datlist, type="map.concentration",it1=1,it2=datlist$nt,
+          make.movie=make.movie, movie.name=paste0(region,"-actual-movie2"),
+          movie.clean=movie.clean)
+invisible()
+```
+
+
+Simulation 
+
+```{r}
+set.seed(-4)
+simlist <- do.sim(sobj, tlist, parlist)
+```
+
+```{r}
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="epoch")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="carrying.density")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.carrying.density")
+sfreset(); 
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="carrying.mass")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.carrying.mass")
+sfreset(); 
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="bloom.initiation.probability")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.bloom.initiation.probability")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.number.of.initiations"); ##sfreset()
+sfreset(); 
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="bloom.initiation.times")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="innovation.biomass")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="biomass.over.time")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="concentration.over.time")
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="observed.concentration.over.time")
+
+plot(NA,NA,xlim=range(tlist$tvec),ylim=c(0,max(simlist$cmat,na.rm=TRUE)),type="n", 
+     xlab="Week", ylab="Observed concentration",
+     main="Observed concentration"); 
+#invisible(apply(simlist$cmat,2,function(cvec) points(tlist$tvec, cvec)))
+invisible(apply(simlist$cmat,2,function(cvec) lines(tlist$tvec, cvec)))
+abline(v=tlist$tvec[simlist$ievent$istart],col="green")
+abline(v=tlist$tvec[simlist$ievent$iend],col="red")
+
+plot(tlist$tvec,apply(simlist$cmat,1,max), xlab="Week", ylab="Maxmimum observed concentration",
+     main="Maximum concentration"); lines(tlist$tvec, apply(simlist$cmat,1,max))
+abline(v=tlist$tvec[simlist$ievent$istart],col="green")
+abline(v=tlist$tvec[simlist$ievent$iend],col="red")
+
+# monitored polygons only
+idx <- match(as.character(datlist$monitorid),colnames(simlist$cmat))
+plot(NA,NA,xlim=range(tlist$tvec),ylim=c(0,max(simlist$cmat[,idx],na.rm=TRUE)),type="n", 
+     xlab="Week", ylab="Observed concentration",
+     main="Observed concentration\n(Monitored polygons)"); 
+#invisible(apply(simlist$cmat[,idx],2,function(cvec) points(tlist$tvec, cvec)))
+invisible(apply(simlist$cmat[,idx],2,function(cvec) lines(tlist$tvec, cvec)))
+abline(v=tlist$tvec[simlist$ievent$istart],col="green")
+abline(v=tlist$tvec[simlist$ievent$iend],col="red")
+
+idx <- match(as.character(datlist$monitorid),colnames(simlist$cmat))
+plot(tlist$tvec,apply(simlist$cmat[,idx],1,max), xlab="Week", ylab="Maxmimum observed concentration",
+     main="Maximum concentration\n(Monitored polygons)"); lines(tlist$tvec, apply(simlist$cmat[,idx],1,max))
+abline(v=tlist$tvec[simlist$ievent$istart],col="green")
+abline(v=tlist$tvec[simlist$ievent$iend],col="red")
+```
+
+```{r}
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,it2=5)
+```
+
+```{r}
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,it2=5,
+         monitored=TRUE)
+```
+
+
+```{r}
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,it2=5,
+         make.movie=TRUE, movie.name=paste0(region,"-movie1"),
+         movie.clean=movie.clean)
+```
+
+```{r}
+make.movie <- TRUE
+#make.movie <- FALSE
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,it2=tlist$nt,
+         make.movie=make.movie, movie.name=paste0(region,"-movie2"),
+         movie.clean=movie.clean)
+invisible()
+```
+
+```{r}
+make.movie <- TRUE
+#make.movie <- FALSE
+plot.sim(simlist, sobj, tlist, parlist, datlist, type="map.concentration",it1=1,it2=tlist$nt,
+         monitored=TRUE,
+         make.movie=make.movie, movie.name=paste0(region,"-monitored-movie2"),
+         movie.clean=movie.clean)
+invisible()
+```

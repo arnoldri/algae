@@ -72,13 +72,25 @@ for(i in 1:nn) adjmat[i,adjmat[[i]]] <- TRUE
 # Connection matrices
 load("data/conn2018.Rda") # creates conn
 matdates <- as.Date(names(conn),format="%Y%m%d")
+conn <- lapply(conn,
+               function(connmat) {
+                  nn <- rownames(connmat)
+                  nn <- gsub(".","",nn,fixed=TRUE)
+                  dimnames(connmat) <- list(nn,nn)
+                  return(connmat)
+               })
 
 # Covariates for the same period
 fname <- "data/Weekly_environmental_variables.xlsx"
 covnames <- excel_sheets(fname)
 covlist <- lapply(1:length(covnames), function(i) as.matrix(read_excel(path=fname,sheet=i,col_names=FALSE)))
 names(covlist) <- covnames
-for(vname in covnames) colnames(covlist[[vname]]) <- matdates
+for(vname in covnames) {
+  colnames(covlist[[vname]]) <- as.character(matdates)
+  rownames(covlist[[vname]]) <- 1:nrow(covlist[[vname]])
+}
+
+covlist[[1]]
 
 # Temperature for stations in the area
 tempdata <- read_excel("data/temperature-data-NIWA.xlsx",sheet=1)

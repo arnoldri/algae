@@ -1,0 +1,299 @@
+---
+title: "HAB Stan"
+output: html_document
+date: "2024-10-03"
+---
+
+```{r}
+library(patchwork)
+library(pander)
+library(latex2exp)
+library(DiagrammeR)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Tutorials
+https://mc-stan.org/users/documentation/tutorials
+
+User Guide
+https://mc-stan.org/docs/stan-users-guide/index.html
+
+Reference Manual
+https://mc-stan.org/docs/reference-manual/
+
+Rstan
+https://mc-stan.org/rstan/
+
+```{r}
+library(rstan)
+library(dplyr)
+```
+
+### Time series model
+
+```{r}
+library(rstan)
+library(dplyr)
+stancode <- c("
+data {
+  int<lower=0> N;
+  vector[N] y;
+}
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma;
+}
+model {
+  for (n in 2:N) {
+    y[n] ~ normal(alpha + beta * y[n-1], sigma);
+  }
+}
+")
+fstan <- "ignore/timeseries.stan"
+
+alpha <- 0.6
+beta <- 0.8
+sigma <- 0.5
+N <- 100
+y <- rep(NA,N)
+y[1] <- 0
+for(i in 2:N) y[i] <- rnorm(1, alpha + beta*y[i-1], sigma)
+plot(1:N,y)
+
+timeseries_data <- list(N=N, y=y)
+
+cat(stancode, file=fstan)
+start.time <- Sys.time()
+fit1 <- stan(
+  file = fstan,              # Stan program
+  data = timeseries_data,    # named list of data
+  chains = 4,                # number of Markov chains
+  warmup = 1000,             # number of warmup iterations per chain
+  iter = 2000,               # total number of iterations per chain
+  cores = 1,                 # number of cores (could use one per chain)
+  refresh = 0                # no progress shown
+  )
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print(time.taken)
+unlink(fstan)
+```
+
+```{r}
+plot(fit1)
+```
+
+### IID Bernoulli Finite mixture model
+
+```{r}
+library(rstan)
+library(dplyr)
+stancode <- c({"
+data {
+   int<lower=1> I; // # of items
+   int<lower=1> J; // # of respondents
+   int<lower=1> C; // # of classes
+   int y[J,I]; // response  matrix
+}
+
+parameters {
+   simplex[C] alpha; // probabilities of being in one group
+   real <lower=0, upper=1> p[C];
+}
+
+model {
+   real lmix[C];
+   
+   for (j in 1:J) {
+     for (c in 1:C) {
+        lmix[c] = log(alpha[c]) + bernoulli_lpmf(y[j,] | p[c]);
+     }
+     target += log_sum_exp(lmix);
+   }
+}
+
+generated quantities {
+  int<lower = 1> pred_class_dis[J]; // posterior predictive prediction for respondent j in latent class c
+  simplex[C] pred_class[J];         // posterior probabilities of respondent j in latent class c
+  real lmix[C];
+
+  for (j in 1:J){
+     for(c in 1:C) {
+        lmix[c] = log(alpha[c]) + bernoulli_lpmf(y[j,] | p[c]);
+     }               
+     for(c in 1:C){
+        pred_class[j][c] = exp((lmix[c])-log_sum_exp(lmix));
+     }
+     pred_class_dis[j] = categorical_rng(pred_class[j]);
+  }
+}
+"})
+fstan <- "ignore/finitemixture.stan"
+```
+
+```{r}
+# simulate data with four items and two classes
+set.seed(-3)
+C <- 2
+J <- 1000
+I <- 4
+latent_group <- sample(1:C,
+                       prob=c(0.2, 0.8),
+                       size=J,
+                       replace=TRUE)
+
+p1 <- 0.2
+p2 <- 0.7
+
+y <- matrix(NA, nrow=J, ncol=I)
+for (i in 1:J) {
+  y[i,] <- case_when(
+    latent_group[i]==1 ~ rbinom(
+      n=I,
+      size=1,
+      prob=p1
+    ),
+    latent_group[i]==2 ~ rbinom(
+      n=I,
+      size=1,
+      prob=p2
+    )
+  )
+}
+
+
+# how the data look
+#DT::datatable(y)
+```
+
+```{r}
+finitemixture_data <- list(I=I, J=J, C=C, y=y)
+
+cat(stancode, file=fstan)
+start.time <- Sys.time()
+fit1 <- stan(
+  file = fstan,              # Stan program
+  data = finitemixture_data, # named list of data
+  chains = 4,                # number of Markov chains
+  warmup = 1000,             # number of warmup iterations per chain
+  iter = 2000,               # total number of iterations per chain
+  cores = 1,                 # number of cores (could use one per chain)
+  refresh = 0                # no progress shown
+  )
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print(time.taken)
+unlink(fstan)
+```
+
+```{r}
+fit1
+plot(fit1)
+traceplot(fit1, c("alpha","p"))
+```
+
+Fix label switching
+
+```{r}
+pars <- fit1 %>% names %>% "["(1:4)
+pars
+
+names(fit1)
+attributes(fit1)
+names(attributes(fit1))
+fit1@model_pars
+
+post_par <- rstan::extract(fit1,
+                 c("alpha", "p", "pred_class", "lp__"),
+                 permuted = TRUE)
+
+
+# classification probabilities
+post_class_p <- post_par$pred_class
+
+# simulated allocation vectors
+post_class <- ((post_class_p[,,1] > 0.5)*1) + 1
+```
+
+
+
+https://mc-stan.org/users/documentation/case-studies/Latent_class_case_study.html#stan-code-for-lca-models
+
+### Gamma model
+
+```{r}
+library(rstan)
+library(dplyr)
+narea <- 200
+pavec <- sort(runif(narea, 0.2, 0.8))
+ivec <- rbinom(narea,1,pavec)
+a <- 4; b <- 1
+yvec <- rgamma(narea, a, b)
+#yvec[ivec==0] <- 0
+```
+
+```{r}
+stancode <- c({"
+data {
+  int<lower=1> narea;
+  real y[narea];
+}
+
+parameters {
+  real<lower=0> a;
+  real<lower=0> b;
+}
+
+model {
+  target += gamma_lpdf(y|a,b);
+}
+"})
+fstan <- "ignore/simple1.stan"
+```
+
+```{r}
+stan_data <- list(narea=narea, y=yvec)
+
+cat(stancode, file=fstan)
+start.time <- Sys.time()
+fit1 <- stan(
+  file = fstan,              # Stan program
+  data = stan_data,          # named list of data
+  chains = 4,                # number of Markov chains
+  warmup = 500,              # number of warmup iterations per chain
+  iter = 1000,               # total number of iterations per chain
+  cores = 4,                 # number of cores (could use one per chain)
+  refresh = 0                # no progress shown
+  )
+end.time <- Sys.time(); time.taken <- end.time - start.time
+print(time.taken)
+unlink(fstan)
+```
+
+```{r}
+fit1
+plot(fit1)
+```
+
+# Multinest
+
+https://github.com/JohannesBuchner/RMultiNest
+
+library(RMultiNest)
+
+# Dnest
+
+```{r}
+library(reticulate)
+```
+
+```{python}
+import dnest4.classic as dn4
+dn4.postprocess()
+```
+
+

@@ -1,0 +1,689 @@
+---
+title: "eDNA"
+author: "Richard Arnold"
+date: '2024-07-16'
+output:
+  pdf_document: default
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Detection of eDNA from tows
+
+Model:
+
+ * $N$ organisms located at $(x,y,z)=(0,0,h)$
+ * shed $S$ copies per unit time
+ * plume moves at a constant velocity $v$ towards positive $x$ values
+ * disperse fully vertically after a short distance
+ * disperse by a random walk in the $y$ direction such that the dispersion in $y$
+   after time $t$ is $\sigma(t)=\sqrt{2A_Ht}$
+ * decay over time such that the number density at time $t$ is reduced by a factor of $e^{-\alpha t}$ 
+   after release at time $0$
+   
+Consider time $t$, following a time interval $\Delta t$ at $t=0$,
+
+ * $NS\Delta t$ copies are released at $t=0$
+ * the number density has decayed by a factor $e^{-\alpha t}$
+ * the plume has travelled distance $x=vt$
+ * the $NS\Delta t$ copies are dispersed over a distance $\Delta x=v\Delta t$ in $x$
+ * the copies are dispersed uniformly over the depth $h$
+ * the plume has dispersed in $y$ with dispersion $\sigma(x)=\sqrt{2A_Ht}=\sqrt{aA_Hx/v}$
+ 
+Volume number density at location $(x,y,z)$ is
+\begin{eqnarray*}
+   C(x,y,z) 
+     &=& NS(\Delta t) \times e^{-\alpha t}
+                      \times \frac{1}{\Delta x} 
+                      \times \frac{1}{\sqrt{2\pi\sigma^2(x)}}e^{-\frac12 y^2/\sigma^2(x)}
+                      \times \frac{1}{h}\\
+     &=& \frac{NS}{hv} \frac{1}{\sqrt{2\pi\sigma^2(x)}}e^{-\frac12 y^2/\sigma^2(x)-\alpha x/v}
+\end{eqnarray*}
+
+```{r}
+xmax <- 15
+ymax <- 10
+np <- 101
+Ah <- 1; v <- 2
+xvec <- seq(from=0,to=xmax,length=np)
+y1 <- 2*sqrt(2*Ah*xmax/v)
+dx <- 1.5
+dt <- dx/v
+```
+
+Consider a full depth tow at location $(x,y)$ with area $A_0$.  The expected number of
+copies captured is
+\begin{eqnarray*}
+  K_V(x,y) &=& \int\!\int_{A_{0}} {\rm d}x{\rm d}y \int_0^h {\rm d}z\; C(x,y,z)\\
+           &=& A_0 C(x,y)\\
+           &=& \frac{NSA_0}{v} \frac{1}{\sqrt{2\pi\sigma^2(x)}}e^{-\frac12 y^2/\sigma^2(x)-\alpha x/v}\\
+           &=& \frac{NSV_V}{vh} \frac{1}{\sqrt{2\pi\sigma^2(x)}}e^{-\frac12 y^2/\sigma^2(x)-\alpha x/v}
+\end{eqnarray*}
+where $C(x,y)=h C(x,y,z)$ is the area density (since $C(x,y,z)$ is independent of $z$), and $V_V=A_0h$ is
+the volume of water sampled.
+
+```{r}
+plot(NA,NA,xlim=c(0,xmax),ylim=ymax*c(-1,1),xlab="x",ylab="y",asp=1)
+abline(h=0)
+lines(xvec, +sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, -sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, +2*sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, -2*sqrt(2*Ah*xvec/v),col="grey")
+abline(v=xmax,col="red")
+abline(v=xmax-dx,col="grey")
+text(xmax, y1/2, lab=expression(A[0]), pos=4)
+polygon(xmax+c(-dx,0,0,-dx,-dx), (y1/2) + (dx/2)*c(-1,-1,1,1,-1), col="green")
+title(expression("Small vertical tow at location (x,y) depth h, area "*A[0]))
+```
+
+Consider a full depth tow of length $L$ and width $w$ at constant $x$ across the plume, with
+$L$ being sufficiently large that the full plume is captured (i.e. $\frac12L>3\sigma(x)$.  The expected number of
+copies captured is
+\begin{eqnarray*}
+  K_H(x)   &=& \int_{x-w/2}^{x+w/2} {\rm d}x \int_{-L/2}^{L/2} {\rm d}y \int_0^h {\rm d}z\; C(x,y,z)\\
+           &=& w \frac{NS}{hv} e^{-\alpha x/v} h\\
+           &=& \frac{NSw}{v} e^{-\alpha x/v}\\
+           &=& \frac{NSV_H}{hLv} e^{-\alpha x/v}
+\end{eqnarray*}
+where $V_H=wLh$ is the volume of water sampled.
+
+```{r}
+plot(NA,NA,xlim=c(0,xmax),ylim=ymax*c(-1,1),xlab="x",ylab="y",asp=1)
+abline(h=0)
+lines(xvec, +sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, -sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, +2*sqrt(2*Ah*xvec/v),col="grey")
+lines(xvec, -2*sqrt(2*Ah*xvec/v),col="grey")
+abline(v=xmax,col="red")
+abline(v=xmax-dx,col="grey")
+text(xmax-dx/2, y1, lab="w", pos=3)
+text(xmax, y1, lab="+L/2", pos=4)
+text(xmax, -y1, lab="-L/2", pos=4)
+polygon(xmax+c(-dx,0,0,-dx,-dx), y1*c(-1,-1,1,1,-1), col="green")
+title("Horizontal cross plume tow at location x\ndepth h, width w, length L")
+```
+
+### Detection
+
+In both of these scenarios if $K$ is the expected number of copies captured, then the actual number of copies captured 
+follows a Poisson distribution
+\[
+   Y|K \sim \text{Poisson}(K)
+\]
+i.e.
+\[ 
+  \Pr(Y=y|K) = e^{-K} \frac{K^y}{y!}
+\]
+
+Assume that the probability of detection ($Z=1$) given the presence of $y$ copies is
+$d(y)$, i.e.
+\[
+  \Pr(Z=1|y) = d(y)
+\]
+then the probability of detection, marginalising out the statistical variation, is
+\begin{eqnarray*}
+  \Pr(Z=1) &=& \sum_{y=0}^\infty \Pr(Z=1|y) \Pr(Y=y)\\
+           &=& \sum_{y=0}^\infty d(y) e^{-K} \frac{K^y}{y!}
+\end{eqnarray*}
+If $d(y)$ is a simple threshold function $d(y)=I(y\geq y_t)$ (i.e. detection is certain
+at or above a threshold number $y_t$, and impossible below that threshold) then
+\begin{eqnarray*}
+  \Pr(Z=1) &=& \sum_{y=y_t}^\infty e^{-K} \frac{K^y}{y!}\\
+           &=& 1 - \sum_{y=0}^{y_t-1} e^{-K} \frac{K^y}{y!}
+\end{eqnarray*}
+
+
+```{r}
+knitr::knit_exit()
+```
+
+
+## Detection of eDNA
+
+```{r fig.wideth="80%", fig.cap="ddPCR estimation of concentration"}
+knitr::include_graphics("fig/ddPCR.png")
+```
+
+
+ * A volume $V_S$ of water is collected, and all of the eDNA it contains is collected by filtration.
+   Assume a count $N_j$ of eDNA fragments of type $j$ is collected ($j=1,\ldots,J$). 
+   If the number density of fragments in the water is $\nu_j$ then
+   \[
+      N_j | \nu_j, V_S \sim \text{Poisson}(\nu_jV_S)
+   \]
+ * The collected eDNA is mixed with a volume $V_M$ of a proprietary mix of primers, probes and water;
+ * A test volume $V_T$ ($1\mu\ell$) is taken from the mixture: The count of fragments in the test volume is
+   \[
+      n_j | N_j,V_M,V_T\sim\text{Poisson}(N_jV_T/V_M)
+   \]
+ * The test volume is atomised into $m$ droplets.  The count of fragments in droplet $i$ is 
+   \[
+      y_{ji} | n_j,m \sim\text{Poisson}(n_j/m)
+   \]
+ * The probability that droplet $i$ has zero fragments is
+   \[
+      \Pr(y_{ji}=0 | n_j,m) = \exp\left(-\frac{n_j}{m}\right)
+   \]
+   and thus the probability that it contains any fragments is
+   \[
+      \Pr(y_{ji}>0 | n_j,m) = 1-\exp\left(-\frac{n_j}{m}\right)
+   \]
+ * The eDNA in the droplets is amplified by PCR, and $m_{j+}$ of the droplets are observed to 
+   be positive for fragment type $j$.  Thus the observed proportion of positive 
+   droplets is 
+   \[
+      \widehat{p}_+ = \frac{m_{j+}}{m}
+   \]
+   and
+   \[
+      m_{j+} | n_j,m \sim \text{Binomial}\left(m,1-e^{-n_j/m}\right)
+   \]
+   or if $n_j/m$ is very small then
+   \[
+      m_{j+} | n_j,m \sim \text{Poisson}\left(m\left(1-e^{-n_j/m}\right)\right)
+   \]
+   Note that we assume no false positives and no false negatives when individual 
+   droplets are amplified and tested for the presence of the eDNA.  
+
+This process is aimed at determining $\nu_j$, the original number density in the water
+from which the sample was collected.  A simple estimate of $\nu_j$ is 
+\[
+   \widehat{\nu}_j = -\frac{V_M m}{V_SV_T} \log\left(1-\frac{m_{j+}}{m}\right)
+\]
+However in this application we are most interested in the probability that the process leads to negative result
+when $\nu_j$ is non-zero. i.e. we want to know
+\begin{eqnarray}
+  && \mbox{}\hspace{-2cm}\Pr(m_{j+}=0 | m,V_S,V_T,V_M,\nu_j)\\
+  &=& 
+  \sum_{N_j=0}^\infty \sum_{n_j=0}^\infty
+  \Pr(m_{j+}=0 | n_j,m) \Pr(n_j | N_j,V_M,V_T) \Pr(N_j | \nu_j,V_S)\\
+  &=& 
+  \sum_{N_j=0}^\infty \sum_{n_j=0}^\infty
+  \exp\left(-m\left[1-e^{-n_j/m}\right]\right) 
+  \exp\left(-\frac{N_jV_T}{V_M}\right)\frac{\left(\frac{N_jV_T}{V_M}\right)^{n_j}}{n_j!}
+  \exp\left(-\nu_jV_S\right)\frac{\left(\nu_jV_S\right)^{N_j}}{N_j!}
+\end{eqnarray}
+Note that the sum over $n_j$ should only be from 0 to $N_j$, but we sum to infinity because the 
+additional terms are all negligible.  
+
+Writing the ratio $V_T/V_M$, i.e. the proportion of the mixture that is atomised and tested, as $d$,
+and suppressing the index $j$
+\begin{eqnarray}
+  && \mbox{}\hspace{-2cm}\Pr(m_{+}=0 | m,V_S,d,\nu)\\
+  &=& 
+  \sum_{N=0}^\infty \sum_{n=0}^\infty
+  \Pr(m_{+}=0 | n,m) \Pr(n | N,d) \Pr(N | \nu,V_S)\\
+  &=& 
+  \sum_{N=0}^\infty \sum_{n=0}^\infty
+  \exp\left(-m\left[1-e^{-n/m}\right]\right) 
+  e^{-Nd}\frac{(Nd)^{n}}{n!}
+  e^{-\nu V_S}\frac{(\nu V_S)^{N}}{N!}
+\end{eqnarray}
+
+At very low concentrations
+\[
+   n | \nu, V_S, d \sim \text{Poisson}(\nu V_Sd)
+\]
+so that
+\begin{eqnarray}
+  && \mbox{}\hspace{-2cm}\Pr(m_{+}=0 | m,V_S,d,\nu)\\
+  &=& 
+  \sum_{n=0}^\infty
+  \Pr(m_{+}=0 | n,m) \Pr(n | \nu,V_S,d)\\
+  &=& 
+  \sum_{n=0}^\infty
+  \exp\left(-m\left[1-e^{-n/m}\right]\right) 
+  e^{-\nu V_S d}\frac{(\nu V_S d)^{n}}{n!}\\
+  &=& 
+  \sum_{n=0}^\infty
+  \exp\left(-m\left[1-e^{-n/m}\right]\right) 
+  e^{-\lambda}\frac{\lambda^{n}}{n!}\\
+\end{eqnarray}
+where $\lambda = \nu V_S d$.
+
+Typically we have $m=2\times10^4$ droplets.  We might expect $\nu V_s\simeq 10$ fragments to be catpured, 
+and a subsampling of $d=1/20$, and in that case $\lambda\simeq 0.5$
+
+```{r}
+probmp0 <- function(lambda, m=20000, nbig=20000) {
+  nvec <- 0:nbig
+  fval <- sapply(lambda, function(lambdav) sum(exp(-m*(1-exp(-nvec/m)))*dpois(nvec,lambdav)))
+  return(fval)
+}
+m <- 20000; nbig <- m
+np <- 101
+lambdavec <- 10^(seq(from=-3,to=+1,length=np))
+plot(lambdavec, (probmp0(lambdavec, m=m, nbig=nbig)), type="l",
+     xlab=expression(lambda), ylab=expression("Pr("*m["+"]==0*"): Prob of no detections"), 
+     main=bquote(lambda==nu*V[S]*d*";  "*m*"="*.(m)*" droplets"))
+```
+
+
+## Particle dispersal
+
+If there is a mass released at time $t_0$ at location ${\bf x}_0$ then it is transported
+by advection (water flow) and dispersion (turbulence).  
+
+Let $p({\bf x},t | {\bf x}_0, t_0, {\bf v}(), {\bf a}(), \Psi)$ be the proportion of the mass released
+that is found at location ${\bf x}$ at time $t$, given water flow ${\bf v}()$ and dispersion ${\bf a}()$.
+$\Psi$ is a set of additional parameters controlling the flow/dispersion model.
+
+A simple model is a simple Gaussian spread in 2D:
+\begin{eqnarray}
+   p({\bf x},t | {\bf x}_0, t_0, {\bf v}, {\bf a}, \Psi)
+   &=& 
+   \frac{I(t-t_0\geq 0)}{2\pi \sqrt{a_xa_y}(t-t_0+t_\varepsilon)}
+   \exp\left(
+      -\frac{\left(x-x_0-v_x(t-t_0)\right)^2}{2a_x(t-t_0+t_\varepsilon)}
+      -\frac{\left(y-y_0-v_y(t-t_0)\right)^2}{2a_y(t-t_0+t_\varepsilon)}
+       \right)\\
+   &=& g({\bf x},t-t_0 |{\bf x}_0, {\bf v}, {\bf a}, \Psi)
+\end{eqnarray}
+where a small positive temporal offset $\Psi=\{t_\varepsilon\}$ is added to avoid a singularity at $t=t_0$.
+
+We have 
+\[
+   \int\!\!\int p({\bf x},t|{\bf x}_0,t_0, {\bf v},{\bf a}, \Psi) \,{\rm d}{\bf x}= 1 
+\]
+for all times $t>t_0$.
+
+Note that $g()$ has a symmetry in which we can interchange ${\bf x}$ and ${\bf x}_0$ and at the
+same time reverse the velocity field, so for any time interval $u\geq 0$:
+\begin{equation}
+   g({\bf x},u|{\bf x}_0,{\bf v},{\bf a},\Psi)
+   = 
+   g({\bf x}_0,u|{\bf x},-{\bf v},{\bf a},\Psi)
+\end{equation}
+
+```{r class.source = 'fold-show'}
+source("funcs.R")
+```
+
+```{r}
+nx <- 101
+ny <- 101
+xmin <- 0; xmax <- 100
+ymin <- 0; ymax <- 100
+xvec <- seq(from=xmin, to=xmax, length=nx)
+yvec <- seq(from=ymin, to=ymax, length=ny)
+
+x0 <- mean(c(xmin,xmax))
+y0 <- mean(c(ymin,ymax))
+t0 <- 0
+vx <- 5; vy <- 1
+ax <- 2^2; ay <- 4^2
+teps <- 0.01
+```
+
+For example here is the spread over time of mass released at ${\bf x}_0=(`r x0`,`r y0`)^T$
+at time $t=`r t0`$ with constant flow field ${\bf v}=(`r vx`,`r vy`)^T$ and
+dispersion ${\bf a}=(`r ax`,`r ay`)^T$ and with $t_\varepsilon=`r teps`$.
+
+**Forward tracking:** $p({\bf x},t|{\bf x}_0,t_0, {\bf v}(), {\bf a}(), \Psi)$: 
+$t_0, \ldots, t_0+10$ 
+(no decay)
+```{r}
+par(mfrow=c(3,4))
+par(mar=0.1*c(1,1,1,1))
+colvec <- hcl.colors(12, "YlOrRd", rev = TRUE)
+colvec <- hcl.colors(12, "YlGnBu")#, rev = TRUE)
+for(t in 0:10) {
+   amat <- outer(xvec,yvec, dispfunc, t=t,
+                 x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps)
+   #if(t==0) amax <- max(amat)
+   amax <- max(amat)
+   breaks <- seq(from=0, to=amax, length=length(colvec)+1)
+   image(xvec, yvec, amat, asp=1, col=colvec, breaks=breaks, axes=FALSE)
+   #image(xvec, yvec, amat,asp=1, main=bquote("Forwards:" ~ t==.(t)), xlab="x", ylab="y",
+   #      col=colvec, breaks=breaks)
+}
+```
+
+A simple backtracking model simply reverses the flow field.  If we are interested in the likely origin
+of mass observed at location ${\bf x}_1$ at time $t_1$ we can backtrack by reversing ${\bf v}()$.  
+
+We might assume that the likelihood that the observed mass was released at location ${\bf x}$ at time $t<t_1$ 
+is given by
+\begin{eqnarray}
+   \tilde{p}({\bf x},t | {\bf x}_1,t_1, {\bf v}(), {\bf a}(), \Psi)
+     &=& g({\bf x},t_1-t |{\bf x}_1, -{\bf v}(), {\bf a}(), \Psi)\\
+     &=& p({\bf x},-t | {\bf x}_1,-t_1, -{\bf v}(), {\bf a}(), \Psi)
+\end{eqnarray}
+In the simple Gaussian model above this is
+\begin{eqnarray}
+   &&\mbox{}\hspace{-2cm}\tilde{p}({\bf x},t | {\bf x}_1, t_1, {\bf v}(), {\bf a}(), \Psi)\\
+   &=& 
+   p({\bf x},t_1 | {\bf x}_1, t, -{\bf v}(), {\bf a}(), \Psi)\\
+   &=& 
+   p({\bf x},-t | {\bf x}_1, -t_1, -{\bf v}(), {\bf a}(), \Psi)\\
+   &=& 
+   g({\bf x},t_1-t | {\bf x}_1, -{\bf v}(), {\bf a}(), \Psi)\\
+   &=& 
+   \frac{I(t_1-t\geq 0)}{2\pi\sqrt{a_xa_y}(t_1-t+t_\varepsilon)}
+   \exp\left(
+      -\frac{\left(x-x_1+v_x(t_1-t)\right)^2}{2a_x(t_1-t+t_\varepsilon)}
+      -\frac{\left(y-y_1+v_y(t_1-t)\right)^2}{2a_y(t_1-t+t_\varepsilon)}
+       \right)
+\end{eqnarray}
+
+**Back tracking:** $\tilde{p}({\bf x},t|{\bf x}_1,t_1, {\bf v}(), {\bf a}(), \Psi) = p({\bf x},-t|{\bf x}_1,-t_1, -{\bf v}(), {\bf a}(), \Psi)$: $t_1, \ldots, t_1-10$ 
+(no decay)
+```{r}
+par(mfrow=c(3,4))
+par(mar=0.1*c(1,1,1,1))
+x1 <- 100; y1 <- 60
+t1 <- 10
+for(t in 10:0) {
+   amat <- outer(xvec,yvec, dispfunc, t=-t,
+                 x0=x1,y0=y1,t0=-t1, vx=-vx,vy=-vy, ax=ax,ay=ay, teps=teps)
+   #if(t==10) amax <- max(amat)
+   amax <- max(amat)
+   breaks <- seq(from=0, to=amax, length=length(colvec)+1)
+   image(xvec, yvec, amat,asp=1, col=colvec, breaks=breaks, axes=FALSE)
+   #image(xvec, yvec, amat,asp=1, main=bquote("Backwards: " ~ t==.(t)), xlab="x", ylab="y",
+   #      col=colvec, breaks=breaks)
+}
+```
+
+## Continuous release with decay
+
+Assume that at location ${\bf x}_0$ there is a continuous release of mass
+at a rate $N_0$ kg/s.   Further assume that the mass decays at a rate
+\[
+   d(t|T_h,T_m) = 2^{-t/T_h} I(0\leq t\leq T_m)
+\]
+where $T_h$ is the decay half life and $T_m$ is the maximum age at which
+all particles have disintegrated.  If we set $\lambda = (1/T_h)\log 2$ then
+\[
+   d(t|T_h,T_m) = e^{-\lambda t} I(0\leq t\leq T_m)
+\]
+The steady state mass in the system is then
+\begin{eqnarray}
+  M_0 &=& \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m)\;{\rm d}t_0\\
+      &=& N_0 \int_{-\infty}^t e^{-\lambda(t-t_0)} I(t_0>t-T_m)\;{\rm d}t_0\\
+      &=& N_0 \int_{t-T_m}^t e^{-\lambda(t-t_0)} \;{\rm d}t_0\\
+      &=& N_0 \int_0^{T_m} e^{-\lambda u} \;{\rm d}u\\
+      &=& \frac{N_0}{\lambda}\left[1-e^{-\lambda T_m}\right]\\
+      &=&\frac{N_0T_h}{\log 2}\left[1-e^{-\lambda T_m}\right]
+\end{eqnarray}
+
+The mass density transiting per unit time at location ${\bf x}$ at time $t$ 
+emitted from a point source at ${\bf x}_0$ at time $t_0$ is
+\[
+   \frac{{\rm d}\rho({\bf x},t|N_0,{\bf x}_0,t_0,{\bf v}(),{\bf a}(), \Psi)}{{\rm d}t}
+   = 
+   N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}(),\Psi)
+\]
+
+**Density rate** ${\rm d}\rho({\bf x},t|N_0,{\bf x}_0,t_0,{\bf v}(),{\bf a}(), \Psi)/{\rm d}t$, 
+$t=t_0, \ldots, t_0+10$ (with decay).  (Scales differ between panels: note max and sum values.)
+```{r}
+par(mfrow=c(3,4))
+par(mar=0.1*c(1,1,1,1))
+n0 <- 1
+th <- 5
+tm <- 7
+for(t in 0:10) {
+   amat <- outer(xvec,yvec, denratefunc, t=t,
+                 x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, n0=n0,th=th,tm=tm)
+   #amat <- log(1+amat)
+   #if(t==0) {
+   #   amin <- min(amat)
+   #   amax <- max(amat)
+   #}
+   amin <- min(amat)
+   amax <- max(amat)
+   breaks <- seq(from=amin, to=amax, length=length(colvec)+1)
+   image(xvec, yvec, amat, asp=1, col=colvec, breaks=breaks, axes=FALSE)
+   #image(xvec, yvec, amat,asp=1, main=bquote("Forwards with decay:" ~ t==.(t)), xlab="x", ylab="y",
+   #      col=colvec, breaks=breaks)
+   mtext(bquote("sum:"~.(sum(amat))~"max:"~.(max(amat))), side=3, adj=1, cex=0.6, line=-1, col="white")
+}
+```
+
+The total (equilibrium) mass density present is
+\begin{eqnarray}
+   &&\mbox{}\hspace{-2cm}\rho({\bf x},t|N_0,{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\\
+   &=& \rho({\bf x}|N_0,{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\\
+   &=& \int_{-\infty}^t N_0 d(t-t_0|T_h,T_m) p({\bf x},t|{\bf x}_0,t_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}t_0\\
+   &=& N_0 \int_{t-T_m}^t e^{-\lambda (t-t_0)} g({\bf x},t-t_0|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}t_0\\
+   &=& N_0 \int_0^{T_m} e^{-\lambda u} g({\bf x},u|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}u\\
+   &=& N_0 h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)
+\end{eqnarray}
+where
+\[
+  h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)
+  =
+  \int_0^{T_m} e^{-\lambda u} g({\bf x},u|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)\;{\rm d}u
+\]
+The function $h()$ retains the same symmetry as $g()$, so since
+\[
+  g({\bf x},u|{\bf x}_0,{\bf v},{\bf a},\Psi)
+  = 
+  g({\bf x}_0,u|{\bf x},-{\bf v},{\bf a},\Psi)
+\]
+it follows that 
+\[
+  h({\bf x},u|{\bf x}_0,{\bf v},{\bf a},\Psi)
+  = 
+  h({\bf x}_0,u|{\bf x},-{\bf v},{\bf a},\Psi)
+\]
+
+In the Gaussian dispersal example
+\[
+  h({\bf x}|{\bf x}_0,{\bf v}(),{\bf a}(),\Psi)
+  =
+  \frac{1}{2\pi \sqrt{a_xa_y}} \int_0^{T_m} \frac{e^{-\lambda u}}{u+t_\varepsilon}
+      \exp\left(
+         -\frac{\left(x-x_0-v_xu\right)^2}{2a_x(u+t_\varepsilon)}
+         -\frac{\left(y-y_0-v_yu\right)^2}{2a_y(u+,t_\varepsilon)}       
+         \right)
+\]
+
+```{r}
+invisible()
+#th <- 5
+#tm <- 7
+#ax <- 2^2; ay <- 5^2
+#amat <- array(0,dim=c(nx,ny))
+#nc <- 100
+#for(i in 1:nc) {
+#   t <- i/nc * 10
+#   amat <- amat + outer(xvec,yvec, denratefunc, t=t,
+#                        x0=x0,y0=y0,t0=0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, n0=n0,th=th,tm=tm)
+#}
+#image(xvec, yvec, amat,asp=1, 
+#      main=bquote(t[h]==.(th) ~ ", " ~ t[m]==.(tm)), 
+#      xlab="x", ylab="y",col=colvec)
+invisible()
+```
+
+**Equilibrium Density**: 
+$\rho({\bf x}|N_0,{\bf x}_0,{\bf v},{\bf a},\Psi)=N_0h({\bf x}|{\bf x}_0,{\bf v},{\bf a},\Psi)$
+```{r}
+th <- 5
+tm <- 7
+ax <- 2^2; ay <- 5^2
+amat <- n0*outer(xvec,yvec, hfunc,
+                 x0=x0,y0=y0, vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, th=th,tm=tm)
+image(xvec, yvec, amat, asp=1, 
+      main=bquote(h(x*"|"*x[0])*":" ~ x[0]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), xlab="x", ylab="y",col=colvec)
+```
+
+The above figure plots, for a continuous fixed source of rate $N_0$ at location ${\bf x}_0$, 
+the equilibrium density at all locations ${\bf x}$: $N_0 h({\bf x}|{\bf x}_0)$.
+
+Now plot at each ${\bf x}_0$ the equilibrium density at ${\bf x}_1$ (in the centre of the diagram)
+that would result from a continuous source at ${\bf x}_0$.  i.e. $N_0 h({\bf x}_1|{\bf x_0})$
+\begin{eqnarray*}
+   N_0 \tilde{h}({\bf x}_0 | {\bf x}_1, {\bf v}, {\bf a}, \Psi) 
+    &=& N_0 h({\bf x}_1|{\bf x}_0, {\bf v}, {\bf a}, \Psi)\\
+    &=& N_0 h({\bf x}_0|{\bf x}_1, -{\bf v}, {\bf a}, \Psi)
+\end{eqnarray*}
+
+
+$N_0 \tilde{h}({\bf x}_0|{\bf x}_!, {\bf v}, {\bf a}, \Psi) 
+  = N_0 h({\bf x}_1|{\bf x}_0, {\bf v}, {\bf a}, \Psi) 
+  = N_0 h({\bf x}_0|{\bf x}_1, -{\bf v}, {\bf a}, \Psi)$
+```{r}
+th <- 5
+tm <- 7
+ax <- 2^2; ay <- 5^2
+x1 <- 50; y1 <- 50
+rho1 <- 1; mu <- 1
+amat <- outer(xvec,yvec, function(x0vec,y0vec) {
+                    apply(cbind(x0vec,y0vec),1,function(x0y0) {
+                          hfunc(x=x1,y=y1,x0=x0y0[1],y0=x0y0[2],
+                          vx=vx,vy=vy, ax=ax,ay=ay, teps=teps, th=th,tm=tm)
+                    })
+                 })
+dim(amat) <- c(length(xvec),length(yvec))
+image(xvec, yvec, amat, asp=1, 
+      main=bquote(h(x[1]*"|"*x[0])*":" ~ x[1]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
+```
+
+(Computing this the other way using the symmetry of h())
+```{r}
+th <- 5
+tm <- 7
+ax <- 2^2; ay <- 5^2
+x1 <- 50; y1 <- 50
+rho1 <- 1; mu <- 1
+amat <- n0*outer(xvec,yvec, hfunc,
+                 x0=x1,y0=y1, vx=-vx,vy=-vy, ax=ax,ay=ay, teps=teps, th=th,tm=tm)
+image(xvec, yvec, amat, asp=1, 
+      main=bquote(h(x[1]*"|"*x[0])*":" ~ x[1]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
+```
+
+## Probabilistic Inversion
+
+Now assume that at some location ${\bf x}_1$ we observe a density $\rho_1$, and that 
+this in an observation made with error:
+\[
+   \rho_1 | \rho_1^\ast, \sigma_e \sim N(\rho_1^\ast, \sigma_e^2)
+\]
+were the true density is $\rho_1^\ast$ and the error variance is $\sigma_e^2$.
+
+Assume that there is a single continous source of unknown strength $N_0$ and unknown
+location ${\bf x}_0$.   Priors for the strength and location are $\pi(N_0)$ and $\pi({\bf x}_0)$
+respectively.
+
+Assume that the velocity field ${\bf v}()$ and the diffusion field ${\bf a}()$ are known.
+
+Using the results from the previous section, conditional on $N_0$ and ${\bf x}_0$ the 
+observed density at ${\bf x}_1$ is
+\[
+  \rho_1^\ast= N_0 h({\bf x}_1|{\bf x}_0, {\bf v}(), {\bf a}(), \Psi)
+\]
+which we write for brevity as 
+\[
+   \rho_1^\ast = h_1^\ast({\bf x}_0) = h_1^\ast
+\]
+but noting its dependence on ${\bf x}_0$.
+
+It follows that the joint distribution of the unknown source strength $N_0$ and location ${\bf x}_0$ is
+\begin{eqnarray*}
+   p(N_0,{\bf x}_0|\rho_1,{\bf x}_1)
+   &\propto&
+   \pi(N_0) \pi({\bf x}_0) \exp\left(-\frac{1}{2\sigma_e^2}
+           \left[\rho_1-N_0h_1^\ast({\bf x}_0)\right]^2\right)\\
+   &\propto&
+   \pi(N_0) \pi({\bf x}_0) \exp\left(-\frac{(h_1^\ast)^2}{2\sigma_e^2}
+           \left[N_0-\frac{\rho_1}{h_1^\ast}\right]^2\right)
+\end{eqnarray*}
+A suitable prior for $N_0$ is the Exponential($\mu$) distribution
+\begin{eqnarray*}
+  N_0  &\sim& \text{Exp}(\mu)\\
+  \pi(N_0) &=& \mu e^{-\mu N_0}
+\end{eqnarray*}
+This can be marginalised out of the posterior distribution as follows. 
+Firstly the joint distribution is
+\begin{eqnarray*}
+   p(N_0,{\bf x}_0|\rho_1,{\bf x}_1)
+   &\propto&
+   \pi({\bf x}_0) e^{-\mu N_0} 
+           \exp\left(-\frac{(h_1^\ast)^2}{2\sigma_e^2}
+           \left[N_0-\frac{\rho_1}{h_1^\ast}\right]^2\right)\\
+   &\propto& 
+   \pi({\bf x}_0)
+           \exp\left( -\frac{(h_1^\ast)^2}{2\sigma_e^2}
+           \left[N_0-\left(\frac{\rho_1}{h_1^\ast} -
+                           \frac{\mu\sigma_e^2}{(h_1^\ast)^2}
+                           \right)\right]^2
+           - \frac{\rho_1\mu}{h_1^\ast} + \frac{\mu^2\sigma_e^2}{2(h_1^\ast)^2}
+                           \right)
+\end{eqnarray*}
+Integrating out $N_0$ leads to
+\begin{eqnarray*}
+   p({\bf x}_0|\rho_1,{\bf x}_1)
+   &\propto&
+   \pi({\bf x}_0) \frac{\sigma_e}{h_1^\ast}
+     \exp\left(
+           - \frac{\rho_1\mu}{h_1^\ast} + \frac{\mu^2\sigma_e^2}{2(h_1^\ast)^2}
+                           \right)
+\end{eqnarray*}
+If we let $\sigma_e\rightarrow 0$ (indicating very accurate observations) we
+are left with a very simple form for the posterior:
+\begin{eqnarray*}
+   p({\bf x}_0|\rho_1,{\bf x}_1)
+   &\propto&
+   \pi({\bf x}_0) \frac{1}{h_1^\ast} e^{\frac{\rho_1\mu}{h_1^\ast}}
+\end{eqnarray*}
+which we plot below for a uniform prior on the source location $\pi({\bf x}_0)\propto 1$.
+
+```{r}
+th <- 5
+tm <- 7
+ax <- 2^2; ay <- 5^2
+x1 <- 50; y1 <- 50
+rho1 <- 1; mu <- 1
+amat <- n0*outer(xvec,yvec, hfunc,
+                 x0=x1,y0=y1, vx=-vx,vy=-vy, ax=ax,ay=ay, teps=teps, th=th,tm=tm)
+
+qmat <- exp(-max(amat)/3.0/amat) * (1/amat)
+image(xvec, yvec, qmat, asp=1, 
+      main=bquote(p(x[0]*"|"*x[1])*":" ~ x[1]==(.(x0)*","*.(y0)) ~ "," ~ t[h]==.(th) ~ "," ~ t[m]==.(tm)), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
+```
+
+Plotting again, but as a contour map
+```{r}
+par(mfrow=c(1,2))
+contour(amat, main=expression(h(x[0]*"|"*x[1])))
+contour(qmat, main=expression(p(x[0]*"|"*x[1])))
+```
+
+
+
+A different prior: e.g. normally distributed in $y$ (centered on $y_a$ with 
+standard deviation $\sigma_a$) and uniform in $x$:
+\[
+   \pi({\bf x}_0) \propto \exp\left(-\frac{1}{2\sigma_a^2}\left[x_{0y}-y_a\right]^2\right)
+\]
+
+
+```{r}
+ya <- 60
+sigmaa <- 10
+p0mat <- t(array(exp(-0.5*(yvec-ya)^2/sigmaa^2), dim=dim(amat)))
+image(xvec, yvec, p0mat, main=bquote(pi(x[0]) %prop% N[y](.(ya),.(sigmaa)^2)), 
+      xlab=expression(x[0]), ylab=expression(y[0]))
+```
+
+The effect of the prior is shown at right below
+```{r}
+par(mfrow=c(1,2))
+image(xvec, yvec, qmat, asp=1, 
+      main=bquote(p(x[0]*"|"*x[1])*":"  ~ pi(x[0]) %prop% 1), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
+image(xvec, yvec, p0mat*qmat, asp=1, 
+      main=bquote(p(x[0]*"|"*x[1])*":" ~ pi(x[0]) %prop% N[y](.(ya),.(sigmaa)^2)), 
+      xlab=expression(x[0]), ylab=expression(y[0]), col=colvec)
+```
+
